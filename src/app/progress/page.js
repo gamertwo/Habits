@@ -9,13 +9,23 @@ export default function ProgressPage() {
 
   useEffect(() => {
     const loadHabits = async () => {
-      const response = await fetch('/api/habits');
-      const data = await response.json();
-      setHabits(data);
+      try {
+        const response = await fetch('/api/habits');
+        
+        const data = await response.json();
+        console.log('Fetched habits:', data);
+        
+        if (Array.isArray(data)) {
+          setHabits(data);
+        }
+      } catch (error) {
+        console.error('Error loading habits:', error);
+      }
     };
+  
     loadHabits();
   }, []);
-
+  
   const handleYearChange = (direction) => {
     setCurrentYear(prev => prev + direction);
   };
