@@ -1,8 +1,8 @@
-"use client"
-import { useState ,useEffect } from 'react';
+"use client";
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { LogIn } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { LogIn } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -10,19 +10,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const router = useRouter();
+
+  // Check if the user is already logged in
   useEffect(() => {
     const userId = document.cookie
       .split('; ')
-      .find(row => row.startsWith('userId='))
+      .find((row) => row.startsWith('userId='))
       ?.split('=')[1];
-  
+
     if (userId) {
-      router.push('/track');  // Redirect to track page instead of root
+      router.push('/track'); // Redirect to the track page if already logged in
     }
-  }, []);
-  
-// In handleSubmit function
-const handleSubmit = async (e) => {
+  }, [router]);
+
+  // Handle login form submission
+  const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const response = await fetch('/api/auth/login', {
@@ -30,22 +32,19 @@ const handleSubmit = async (e) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-  
+
       const data = await response.json();
-  
+
       if (response.ok) {
-        document.cookie = `currentUser=${data.username}; path=/`;
-        document.cookie = `userId=${data.userId}; path=/`;
+        // Redirect to the home page after successful login
         router.push('/');
       } else {
-        setError(data.error);
+        setError(data.message || 'Invalid credentials');
       }
     } catch (error) {
       setError('An error occurred during login');
     }
   };
-  
-  
 
   return (
     <div className="min-h-screen bg-gray-900 p-4 flex items-center justify-center">
