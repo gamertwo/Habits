@@ -24,7 +24,7 @@ export default function Navbar() {
           <BarChart className="h-6 w-6" />
           <span className="text-xs">Progress</span>
         </Link>
-        <Link href="/create" className={`flex flex-col items-center gap-1 ${isActive('/create')}`}>
+        <Link href="/" className={`flex flex-col items-center gap-1 ${isActive('/')}`}>
           <Plus className="h-6 w-6" />
           <span className="text-xs">Create</span>
         </Link>

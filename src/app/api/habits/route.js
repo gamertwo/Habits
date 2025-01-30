@@ -1,10 +1,38 @@
-import { ObjectId } from 'mongodb';
-import { connectToDatabase, closeConnection } from '../db/mongodb';
+import { promises as fs } from 'fs';
+import path from 'path';
+
+const dataFilePath = path.join(process.cwd(), 'data', 'habits.json');
+
+// Ensure data directory exists
+async function ensureDataDirectory() {
+  const dir = path.join(process.cwd(), 'data');
+  try {
+    await fs.access(dir);
+  } catch {
+    await fs.mkdir(dir);
+  }
+}
+
+// Read habits from JSON file
+async function readHabits() {
+  try {
+    await ensureDataDirectory();
+    const data = await fs.readFile(dataFilePath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
+}
+
+// Write habits to JSON file
+async function writeHabits(habits) {
+  await ensureDataDirectory();
+  await fs.writeFile(dataFilePath, JSON.stringify(habits, null, 2));
+}
 
 export async function GET() {
   try {
-    const db = await connectToDatabase();
-    const habits = await db.collection('habits').find({}).toArray();
+    const habits = await readHabits();
     return new Response(JSON.stringify(habits), { status: 200 });
   } catch (error) {
     console.error('Error in GET request:', error);
@@ -13,53 +41,48 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  let database;
   try {
     const habit = await request.json();
-    database = await connectToDatabase();
-    const result = await database.collection('habits').insertOne(habit);
-    return new Response(JSON.stringify({ 
-      insertedId: result.insertedId,
-      habit: { ...habit, _id: result.insertedId }
+    const habits = await readHabits();
+    const newHabit = { ...habit, _id: Date.now().toString() };
+    habits.push(newHabit);
+    await writeHabits(habits);
+    return new Response(JSON.stringify({
+      insertedId: newHabit._id,
+      habit: newHabit
     }), { status: 201 });
   } catch (error) {
     console.error('Error in POST request:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  } finally {
-    await closeConnection();
   }
 }
 
 export async function PUT(request) {
-  let database;
   try {
     const { id, completedDates } = await request.json();
-    database = await connectToDatabase();
-    await database.collection('habits').updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { completedDates } }
-    );
+    const habits = await readHabits();
+    const habitIndex = habits.findIndex(h => h._id === id);
+    if (habitIndex !== -1) {
+      habits[habitIndex].completedDates = completedDates;
+      await writeHabits(habits);
+    }
     return new Response(JSON.stringify({ message: 'Habit updated successfully' }), { status: 200 });
   } catch (error) {
     console.error('Error in PUT request:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  } finally {
-    await closeConnection();
   }
 }
 
 export async function DELETE(request) {
-  let database;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    database = await connectToDatabase();
-    await database.collection('habits').deleteOne({ _id: new ObjectId(id) });
+    const habits = await readHabits();
+    const filteredHabits = habits.filter(h => h._id !== id);
+    await writeHabits(filteredHabits);
     return new Response(JSON.stringify({ message: 'Habit deleted successfully' }), { status: 200 });
   } catch (error) {
     console.error('Error in DELETE request:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  } finally {
-    await closeConnection();
   }
 }

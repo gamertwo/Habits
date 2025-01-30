@@ -1,305 +1,186 @@
 "use client"
+import { useState } from 'react';
+import { Calendar, Plus } from "lucide-react";
 
-import { useState, useEffect } from 'react'
-import Calendar from 'react-calendar'
-import 'react-calendar/dist/Calendar.css'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { jsPDF } from "jspdf"
+export default function CreateHabit() {
+  const [habitData, setHabitData] = useState({
+    name: '',
+    category: '',
+    emoji: '',
+    maxCheckOffs: 1,
+    color: '#10B981', // Default green color
+    completedDates: [],
+  });
 
-export default function Home() {
-  const [habits, setHabits] = useState([])
-  const [newHabitName, setNewHabitName] = useState('')
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [activeTab, setActiveTab] = useState('daily')
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  
+  const categories = [
+    'Health & Fitness',
+    'Mind & Soul',
+    'Work & Study',
+    'Hobbies',
+    'Social',
+    'Other'
+  ];
 
-  useEffect(() => {
-    fetchHabits()
-  }, [])
+  const commonEmojis = [
+    '💪', '🏃', '🧘', '📚', '💻', '🎨', 
+    '🎵', '🌱', '💭', '💡', '✍️', '🎯'
+  ];
 
-  const fetchHabits = async () => {
-    try {
-      const response = await fetch('/api/habits')
-      if (!response.ok) {
-        throw new Error('Failed to fetch habits')
-      }
-      const data = await response.json()
-      setHabits(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error('Error fetching habits:', error)
-      setHabits([])
-    }
-  }
+  const predefinedColors = [
+    '#10B981', // Green
+    '#3B82F6', // Blue
+    '#8B5CF6', // Purple
+    '#EC4899', // Pink
+    '#F59E0B', // Yellow
+    '#EF4444'  // Red
+  ];
 
-  const addHabit = async (e) => {
-    e.preventDefault()
-    if (newHabitName.trim()) {
-      try {
-        const response = await fetch('/api/habits', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newHabitName.trim(), completedDates: [] })
-        })
-        if (!response.ok) {
-          throw new Error('Failed to add habit')
-        }
-        const data = await response.json()
-        setHabits(prevHabits => [...prevHabits, { ...data.habit, _id: data.insertedId }])
-        setNewHabitName('')
-      } catch (error) {
-        console.error('Error adding habit:', error)
-      }
-    }
-  }
-
-  const toggleHabit = async (id) => {
-    const dateString = selectedDate.toISOString().split('T')[0]
-    const habit = habits.find(h => h._id === id)
-    const updatedCompletedDates = habit.completedDates.includes(dateString)
-      ? habit.completedDates.filter(date => date !== dateString)
-      : [...habit.completedDates, dateString]
-   
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
       const response = await fetch('/api/habits', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, completedDates: updatedCompletedDates })
-      })
-      if (!response.ok) {
-        throw new Error('Failed to update habit')
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...habitData,
+          createdAt: new Date(),
+        }),
+      });
+     
+      if (response.ok) {
+        setHabitData({
+          name: '',
+          category: '',
+          emoji: '',
+          maxCheckOffs: 1,
+          color: '#10B981',
+          completedDates: [],
+        });
+        alert('Habit created successfully!');
       }
-      setHabits(prevHabits => prevHabits.map(habit =>
-        habit._id === id ? { ...habit, completedDates: updatedCompletedDates } : habit
-      ))
     } catch (error) {
-      console.error('Error updating habit:', error)
+      console.error('Error creating habit:', error);
     }
-  }
+  };
 
-  const removeHabit = async (id) => {
-    try {
-      const response = await fetch(`/api/habits?id=${id}`, { method: 'DELETE' })
-      if (!response.ok) {
-        throw new Error('Failed to delete habit')
-      }
-      setHabits(prevHabits => prevHabits.filter(habit => habit._id !== id))
-    } catch (error) {
-      console.error('Error removing habit:', error)
-    }
-  }
-
-  const getStreak = (habit) => {
-    let streak = 0
-    const today = new Date()
-    for (let i = 0; i < 365; i++) {
-      const date = new Date(today)
-      date.setDate(date.getDate() - i)
-      const dateString = date.toISOString().split('T')[0]
-      if (habit.completedDates.includes(dateString)) {
-        streak++
-      } else {
-        break
-      }
-    }
-    return streak
-  }
-
-  const getCompletionStatus = (date) => {
-    const dateString = date.toISOString().split('T')[0]
-    const completedHabits = habits.filter(habit => habit.completedDates.includes(dateString))
-    if (completedHabits.length === 0) return 'incomplete'
-    if (completedHabits.length === habits.length) return 'complete'
-    return 'partial'
-  }
-
-  const getWeeklyProgress = () => {
-    const oneWeekAgo = new Date()
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-    const totalPossible = habits.length * 7
-    const completed = habits.reduce((sum, habit) => {
-      return sum + habit.completedDates.filter(date => new Date(date) >= oneWeekAgo).length
-    }, 0)
-    return Math.round((completed / totalPossible) * 100)
-  }
-
-  const getHabitData = () => {
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-   
-    const data = []
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(thirtyDaysAgo)
-      date.setDate(date.getDate() + i)
-      const dateString = date.toISOString().split('T')[0]
-      const completedHabits = habits.filter(habit => habit.completedDates.includes(dateString)).length
-      data.push({
-        date: dateString,
-        completed: completedHabits
-      })
-    }
-    return data
-  }
-
-  const getOverallSuccessRate = () => {
-    const totalPossible = habits.length * 30
-    const completed = habits.reduce((sum, habit) => sum + habit.completedDates.length, 0)
-    return Math.round((completed / totalPossible) * 100)
-  }
-
-  const generateReport = () => {
-    const doc = new jsPDF()
-    doc.text("Habit Tracker Report", 20, 10)
-    habits.forEach((habit, index) => {
-      doc.text(`${habit.name}: ${getStreak(habit)} day streak`, 20, 20 + (index * 10))
-    })
-    doc.text(`Overall Success Rate: ${getOverallSuccessRate()}%`, 20, 20 + (habits.length * 10))
-    doc.save("habit-tracker-report.pdf")
-  }
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-      <nav className="bg-gray-800 p-4">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-indigo-400">Habit Tracker</h1>
-       
+    <div className="min-h-screen bg-gray-900 p-4">
+      <div className="max-w-md mx-auto">
+        <div className="flex items-center gap-2 mb-6">
+          <Plus className="h-6 w-6 text-blue-400" />
+          <h1 className="text-2xl font-bold text-gray-100">Create New Habit</h1>
         </div>
-      </nav>
 
-      <div className="py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-          <div className="px-6 py-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-gray-700 p-6 rounded-lg shadow-md">
-                <Calendar
-                  onChange={setSelectedDate}
-                  value={selectedDate}
-                  className="w-full bg-gray-800 text-gray-100 border-gray-700 rounded-lg"
-                  tileClassName={({ date, view }) =>
-                    view === 'month' ? `${
-                      getCompletionStatus(date) === 'complete' ? 'bg-green-600' :
-                      getCompletionStatus(date) === 'partial' ? 'bg-yellow-600' :
-                      'bg-red-600'
-                    } hover:opacity-75 text-gray-100` : null
-                  }
-                />
-              </div>
-             
-              <div>
-                <form onSubmit={addHabit} className="mb-6">
-                  <div className="flex">
-                    <input
-                      type="text"
-                      value={newHabitName}
-                      onChange={(e) => setNewHabitName(e.target.value)}
-                      placeholder="Enter new habit"
-                      className="flex-grow px-4 py-2 bg-gray-700 border border-gray-600 rounded-l-md focus:ring-indigo-500 focus:border-indigo-500 text-gray-100"
-                    />
-                    <button type="submit" className="px-4 py-2 border border-transparent text-sm font-medium rounded-r-md text-gray-900 bg-indigo-400 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                      Add Habit
-                    </button>
-                  </div>
-                </form>
-               
-                <ul className="space-y-3">
-                  {habits.map(habit => (
-                    <li key={habit._id} className="flex items-center justify-between bg-gray-700 p-4 rounded-md shadow">
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={(habit.completedDates ?? []).includes(selectedDate.toISOString().split('T')[0])}
-                          onChange={() => toggleHabit(habit._id)}
-                          className="h-4 w-4 text-indigo-400 focus:ring-indigo-500 border-gray-600 rounded bg-gray-700"
-                        />
-                        <span className="ml-3 text-gray-100">{habit.name}</span>
-                        <span className="ml-2 text-sm text-gray-400">Streak: {getStreak(habit)}</span>
-                        {getStreak(habit) >= 7 && <span className="ml-2">🔥</span>}
-                        {getStreak(habit) >= 30 && <span className="ml-2">🏆</span>}
-                      </div>
-                      <button onClick={() => removeHabit(habit._id)} className="text-red-400 hover:text-red-300">
-                        <svg className="h-5 w-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                          <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                        </svg>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-           
-              <div className="mt-12">
-                <h2 className="text-2xl font-bold text-indigo-400 mb-4">Analytics</h2>
-                <div className="flex mb-4">
-                  <button
-                    className={`mr-2 px-4 py-2 rounded ${activeTab === 'daily' ? 'bg-indigo-600 text-gray-100' : 'bg-gray-700 text-gray-300'}`}
-                    onClick={() => setActiveTab('daily')}
-                  >
-                    Daily
-                  </button>
-                  <button
-                    className={`mr-2 px-4 py-2 rounded ${activeTab === 'weekly' ? 'bg-indigo-600 text-gray-100' : 'bg-gray-700 text-gray-300'}`}
-                    onClick={() => setActiveTab('weekly')}
-                  >
-                    Weekly
-                  </button>
-                  <button
-                    className={`px-4 py-2 rounded ${activeTab === 'overall' ? 'bg-indigo-600 text-gray-100' : 'bg-gray-700 text-gray-300'}`}
-                    onClick={() => setActiveTab('overall')}
-                  >
-                    Overall
-                  </button>
-                </div>
-                {activeTab === 'daily' && (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={getHabitData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="date" stroke="#9CA3AF" />
-                      <YAxis stroke="#9CA3AF" />
-                      <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: 'none' }} />
-                      <Legend />
-                      <Line type="monotone" dataKey="completed" stroke="#818CF8" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-                {activeTab === 'weekly' && (
-                  <div className="bg-gray-700 h-4 rounded-full overflow-hidden">
-                    <div
-                      className="bg-indigo-600 h-4 rounded-full transition-all duration-500 ease-out"
-                      style={{ width: `${getWeeklyProgress()}%` }}
-                    ></div>
-                  </div>
-                )}
-                {activeTab === 'overall' && (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Completed', value: getOverallSuccessRate() },
-                          { name: 'Missed', value: 100 - getOverallSuccessRate() }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                        label
-                      >
-                        <Cell fill="#818CF8" />
-                        <Cell fill="#4B5563" />
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: 'none' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-             
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Habit Name & Emoji */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-200">
+              Habit Name & Icon
+            </label>
+            <div className="flex gap-2">
               <button
-                onClick={generateReport}
-                className="mt-8 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-gray-900 bg-indigo-400 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-2 bg-gray-800 rounded-lg border border-gray-700 hover:bg-gray-700 transition-colors"
               >
-                Generate Report
+                {habitData.emoji || '😀'}
               </button>
+              <input
+                type="text"
+                value={habitData.name}
+                onChange={(e) => setHabitData({...habitData, name: e.target.value})}
+                className="flex-1 p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
+                placeholder="Enter habit name"
+                required
+              />
+            </div>
+            
+            {/* Emoji Picker */}
+            {showEmojiPicker && (
+              <div className="grid grid-cols-6 gap-2 p-2 bg-gray-800 rounded-lg border border-gray-700 mt-2">
+                {commonEmojis.map(emoji => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      setHabitData({...habitData, emoji});
+                      setShowEmojiPicker(false);
+                    }}
+                    className="p-2 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Category */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-200">
+              Category
+            </label>
+            <select
+              value={habitData.category}
+              onChange={(e) => setHabitData({...habitData, category: e.target.value})}
+              className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
+              required
+            >
+              <option value="">Select a category</option>
+              {categories.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Check-offs */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-200">
+              Daily Check-offs Required
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={habitData.maxCheckOffs}
+              onChange={(e) => setHabitData({...habitData, maxCheckOffs: parseInt(e.target.value)})}
+              className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
+              required
+            />
+          </div>
+
+          {/* Color Selection */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-200">
+              Color Theme
+            </label>
+            <div className="grid grid-cols-6 gap-2">
+              {predefinedColors.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setHabitData({...habitData, color})}
+                  className={`w-full aspect-square rounded-lg border-2 transition-transform hover:scale-110 ${
+                    habitData.color === color ? 'border-white' : 'border-transparent'
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
             </div>
           </div>
-        </div>
+
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Create Habit
+          </button>
+        </form>
       </div>
-    )
+    </div>
+  );
 }
