@@ -1,22 +1,27 @@
-"use client"
+"use client";
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { UserPlus } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { UserPlus } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SignupPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
   const router = useRouter();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Check if passwords match
     if (password !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
+    // Send signup request to the backend
     const response = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -24,7 +29,12 @@ export default function SignupPage() {
     });
 
     if (response.ok) {
+      // Redirect to login page on successful signup
       router.push('/login');
+    } else {
+      // Handle error response
+      const data = await response.json();
+      setError(data.error || 'Failed to create account');
     }
   };
 
@@ -39,6 +49,11 @@ export default function SignupPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {error && (
+              <div className="mb-4 p-2 bg-red-600 text-white rounded-lg text-center">
+                {error}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-200 mb-1">
@@ -83,8 +98,11 @@ export default function SignupPage() {
                 Sign Up
               </button>
               <div className="text-center text-gray-400">
-                Already have an account? 
-                <Link href="/login" className="text-blue-400 hover:text-blue-300 ml-1">
+                Already have an account?{' '}
+                <Link
+                  href="/login"
+                  className="text-blue-400 hover:text-blue-300 ml-1"
+                >
                   Login
                 </Link>
               </div>
