@@ -1,13 +1,14 @@
 "use client"
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, AreaChart, Area } from 'recharts';
 import { Download, Upload, BarChart3 } from "lucide-react";
 
 export default function AnalyticsPage() {
   const [habits, setHabits] = useState([]);
   const [selectedTimeframe, setSelectedTimeframe] = useState('week');
   const [chartData, setChartData] = useState([]);
+  const [streakData, setStreakData] = useState([]);
 
   useEffect(() => {
     fetchHabits();
@@ -15,6 +16,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     processChartData();
+    processStreakData();
   }, [habits, selectedTimeframe]);
 
   const fetchHabits = async () => {
@@ -49,6 +51,32 @@ export default function AnalyticsPage() {
       });
     }
     setChartData(data);
+  };
+
+  const processStreakData = () => {
+    const data = [];
+    const today = new Date();
+    const last30Days = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      return date.toISOString().split('T')[0];
+    }).reverse();
+
+    last30Days.forEach(date => {
+      const streaks = habits.filter(habit => {
+        const completionsForDate = habit.completedDates?.filter(d => d === date).length || 0;
+        return completionsForDate >= (habit.maxCheckOffs || 1);
+      }).length;
+
+      data.push({
+        date,
+        streaks,
+        totalHabits: habits.length,
+        completionRate: habits.length > 0 ? (streaks / habits.length) * 100 : 0
+      });
+    });
+
+    setStreakData(data);
   };
 
   const exportData = () => {
@@ -209,6 +237,47 @@ export default function AnalyticsPage() {
                     <Tooltip contentStyle={{ backgroundColor: '#1F2937' }} />
                     <Bar dataKey="completions" fill="#3B82F6" />
                   </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">Streak Analysis</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={streakData}>
+                    <XAxis dataKey="date" stroke="#9CA3AF" />
+                    <YAxis stroke="#9CA3AF" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1F2937' }}
+                      formatter={(value, name) => {
+                        if (name === 'completionRate') return `${value.toFixed(1)}%`;
+                        return value;
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="streaks" 
+                      stackId="1"
+                      stroke="#3B82F6" 
+                      fill="#3B82F6" 
+                      fillOpacity={0.3}
+                      name="Completed Habits"
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="completionRate" 
+                      stackId="2"
+                      stroke="#10B981" 
+                      fill="#10B981" 
+                      fillOpacity={0.3}
+                      name="Completion Rate (%)"
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>

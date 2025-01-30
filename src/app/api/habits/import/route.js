@@ -11,10 +11,13 @@ export async function POST(req) {
       .catch(() => []);
     
     // Merge existing and new data, avoiding duplicates by _id
-    const mergedData = [
-      ...existingData,
-      ...newData.filter(newHabit => 
-        !existingData.some(existingHabit => 
+    const importedData = await req.json();
+    
+    // Merge imported data with existing data, avoiding duplicates
+    localHabits = [
+      ...localHabits,
+      ...importedData.filter(newHabit => 
+        !localHabits.some(existingHabit => 
           existingHabit._id === newHabit._id
         )
       )

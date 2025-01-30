@@ -5,8 +5,23 @@
     "emoji": "📚",
     "maxCheckOffs": 1,
     "color": "#3B82F6",
-    "completedDates": [],
+    "completedDates": [
+      "2025-01-26",
+      "2025-01-27",
+      "2025-01-28",
+      "2025-01-29"
+    ],
     "createdAt": "2025-01-30T17:02:29.094Z",
     "_id": "1738256549171"
+  },
+  {
+    "name": "Workout",
+    "category": "Health & Fitness",
+    "emoji": "",
+    "maxCheckOffs": 1,
+    "color": "#10B981",
+    "completedDates": [],
+    "createdAt": "2025-01-30T18:13:58.560Z",
+    "_id": "1738260838578"
   }
 ]
