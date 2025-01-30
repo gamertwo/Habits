@@ -2,16 +2,13 @@ import { ObjectId } from 'mongodb';
 import { connectToDatabase, closeConnection } from '../db/mongodb';
 
 export async function GET() {
-  let database;
   try {
-    database = await connectToDatabase();
-    const habits = await database.collection('habits').find({}).toArray();
+    const db = await connectToDatabase();
+    const habits = await db.collection('habits').find({}).toArray();
     return new Response(JSON.stringify(habits), { status: 200 });
   } catch (error) {
     console.error('Error in GET request:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  } finally {
-    await closeConnection();
   }
 }
 

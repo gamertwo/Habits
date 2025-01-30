@@ -1,0 +1,92 @@
+{
+  "name": "",
+  "reminderTime": "",
+  "nodes": [
+    {
+      "id": "1",
+      "type": "input",
+      "data": {
+        "label": "Start Workout"
+      },
+      "position": {
+        "x": 165.5,
+        "y": -143
+      },
+      "width": 150,
+      "height": 40,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 165.5,
+        "y": -143
+      },
+      "dragging": false
+    },
+    {
+      "id": "1737638380164",
+      "type": "default",
+      "data": {
+        "label": "Pushups"
+      },
+      "position": {
+        "x": 135.46950270853378,
+        "y": -76.56171266303562
+      },
+      "width": 150,
+      "height": 40,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 135.46950270853378,
+        "y": -76.56171266303562
+      },
+      "dragging": false
+    },
+    {
+      "id": "1737638384681",
+      "type": "default",
+      "data": {
+        "label": "Situps"
+      },
+      "position": {
+        "x": 391.5171395629849,
+        "y": 189.03344147870502
+      },
+      "width": 150,
+      "height": 40
+    },
+    {
+      "id": "1737638386190",
+      "type": "default",
+      "data": {
+        "label": "Situps"
+      },
+      "position": {
+        "x": 155.67902136476155,
+        "y": -4.078227518708275
+      },
+      "width": 150,
+      "height": 40,
+      "selected": true,
+      "positionAbsolute": {
+        "x": 155.67902136476155,
+        "y": -4.078227518708275
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "1",
+      "sourceHandle": null,
+      "target": "1737638380164",
+      "targetHandle": null,
+      "id": "reactflow__edge-1-1737638380164"
+    },
+    {
+      "source": "1737638380164",
+      "sourceHandle": null,
+      "target": "1737638386190",
+      "targetHandle": null,
+      "id": "reactflow__edge-1737638380164-1737638386190"
+    }
+  ]
+}

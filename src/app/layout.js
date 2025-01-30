@@ -1,8 +1,8 @@
 "use client"
-
 import localFont from "next/font/local";
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
+import Navbar from "@/components/Navbar";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -16,15 +16,15 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
-
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900`}>
         <SessionProvider>
-          {children}
+          <main className="pb-20">
+            {children}
+          </main>
+          <Navbar />
         </SessionProvider>
       </body>
     </html>
