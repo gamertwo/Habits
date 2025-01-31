@@ -16,7 +16,7 @@ export function middleware(request) {
   }
 
   if (userId && isAuthPage) {
-    return NextResponse.redirect(new URL('/track', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   return NextResponse.next();

@@ -26,7 +26,8 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        router.push('/');
+        // Force a page reload after successful login
+        window.location.href = '/';
       } else {
         setError(data.error || 'Login failed');
       }
