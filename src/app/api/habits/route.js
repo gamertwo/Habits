@@ -1,125 +1,68 @@
-import { connectToDatabase } from "@/app/api/db/mongodb";
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { ObjectId } from "mongodb";
+import { ObjectId } from 'mongodb';
+import { connectToDatabase } from '../db/mongodb';
 
-// Helper function to validate user
-const validateUser = async (request) => {
-  const cookieStore = cookies();
-  const userId = cookieStore.get("userId")?.value;
-
-  if (!userId) {
-    throw new Error("User not authenticated");
-  }
-
-  return userId;
-};
-
-// Fetch all habits for the logged-in user
 export async function GET(request) {
-  try {
-    const userId = await validateUser(request);
-    const db = await connectToDatabase();
-
-    const habits = await db
-      .collection("habits")
-      .find({ userId: new ObjectId(userId) })
-      .toArray();
-
-    return NextResponse.json(habits);
-  } catch (error) {
-    console.error("GET Error:", error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message === "User not authenticated" ? 401 : 500 }
-    );
-  }
+  const { cookies } = request;
+  const userId = cookies.get('userId')?.value;
+  
+  const db = await connectToDatabase();
+  const habits = await db.collection('habits')
+    .find({ userId: userId })
+    .toArray();
+    
+  return Response.json(habits);
 }
 
-// Create a new habit
 export async function POST(request) {
-  try {
-    const userId = await validateUser(request);
-    const habitData = await request.json();
-    const db = await connectToDatabase();
+  const habitData = await request.json();
+  const { cookies } = request;
+  const userId = cookies.get('userId')?.value;
+  
+  const db = await connectToDatabase();
+  const result = await db.collection('habits').insertOne({
+    ...habitData,
+    userId: userId,
+    createdAt: new Date(),
+  });
 
-    const result = await db.collection("habits").insertOne({
-      ...habitData,
-      userId: new ObjectId(userId),
-      createdAt: new Date(),
-    });
-
-    return NextResponse.json(
-      { success: true, habitId: result.insertedId },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("POST Error:", error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message === "User not authenticated" ? 401 : 500 }
-    );
-  }
+  return Response.json({
+    success: true,
+    _id: result.insertedId
+  });
 }
 
-// Update an existing habit
 export async function PUT(request) {
-  try {
-    const userId = await validateUser(request);
-    const { id, ...updatedData } = await request.json();
-    const db = await connectToDatabase();
+  const { id, ...updateData } = await request.json();
+  const { cookies } = request;
+  const userId = cookies.get('userId')?.value;
+  
+  const db = await connectToDatabase();
+  const result = await db.collection('habits').updateOne(
+    { _id: new ObjectId(id), userId: userId },
+    { $set: updateData }
+  );
 
-    const result = await db.collection("habits").updateOne(
-      {
-        _id: new ObjectId(id),
-        userId: new ObjectId(userId),
-      },
-      { $set: updatedData }
-    );
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Habit not found or unauthorized" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ success: true, modifiedCount: result.modifiedCount });
-  } catch (error) {
-    console.error("PUT Error:", error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message === "User not authenticated" ? 401 : 500 }
-    );
-  }
+  return Response.json({
+    success: true,
+    modifiedCount: result.modifiedCount
+  });
 }
 
-// Delete a habit
 export async function DELETE(request) {
-  try {
-    const userId = await validateUser(request);
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    const db = await connectToDatabase();
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  const { cookies } = request;
+  const userId = cookies.get('userId')?.value;
+  
+  const db = await connectToDatabase();
+  const result = await db.collection('habits').deleteOne({
+    _id: new ObjectId(id),
+    userId: userId
+  });
 
-    const result = await db.collection("habits").deleteOne({
-      _id: new ObjectId(id),
-      userId: new ObjectId(userId),
-    });
-
-    if (result.deletedCount === 0) {
-      return NextResponse.json(
-        { error: "Habit not found or unauthorized" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ success: true, message: "Habit deleted successfully" });
-  } catch (error) {
-    console.error("DELETE Error:", error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message === "User not authenticated" ? 401 : 500 }
-    );
-  }
+  return Response.json({
+    success: true,
+    deletedCount: result.deletedCount
+  });
 }
+

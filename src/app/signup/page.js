@@ -1,40 +1,50 @@
 "use client";
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { UserPlus } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function SignupPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [userData, setUserData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    // Check if passwords match
-    if (password !== confirmPassword) {
+    if (userData.password !== userData.confirmPassword) {
       setError('Passwords do not match');
+      setLoading(false);
       return;
     }
 
-    // Send signup request to the backend
-    const response = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
 
-    if (response.ok) {
-      // Redirect to login page on successful signup
-      router.push('/login');
-    } else {
-      // Handle error response
       const data = await response.json();
-      setError(data.error || 'Failed to create account');
+
+      if (response.ok) {
+        router.push('/login');
+      } else {
+        setError(data.error || 'Signup failed');
+      }
+    } catch (error) {
+      setError('Something went wrong');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -49,20 +59,32 @@ export default function SignupPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {error && (
-              <div className="mb-4 p-2 bg-red-600 text-white rounded-lg text-center">
-                {error}
-              </div>
-            )}
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="p-2 text-red-400 bg-red-900/20 rounded-lg text-center">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-200 mb-1">
-                  Username
+                  Full Name
                 </label>
                 <input
                   type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={userData.name}
+                  onChange={(e) => setUserData({...userData, name: e.target.value})}
+                  className="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-200 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={userData.email}
+                  onChange={(e) => setUserData({...userData, email: e.target.value})}
                   className="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                   required
                 />
@@ -73,8 +95,8 @@ export default function SignupPage() {
                 </label>
                 <input
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={userData.password}
+                  onChange={(e) => setUserData({...userData, password: e.target.value})}
                   className="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                   required
                 />
@@ -85,24 +107,22 @@ export default function SignupPage() {
                 </label>
                 <input
                   type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={userData.confirmPassword}
+                  onChange={(e) => setUserData({...userData, confirmPassword: e.target.value})}
                   className="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                   required
                 />
               </div>
               <button
                 type="submit"
-                className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors"
+                className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={loading}
               >
-                Sign Up
+                {loading ? 'Creating Account...' : 'Sign Up'}
               </button>
               <div className="text-center text-gray-400">
                 Already have an account?{' '}
-                <Link
-                  href="/login"
-                  className="text-blue-400 hover:text-blue-300 ml-1"
-                >
+                <Link href="/login" className="text-blue-400 hover:text-blue-300">
                   Login
                 </Link>
               </div>

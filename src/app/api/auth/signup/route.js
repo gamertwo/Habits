@@ -1,32 +1,38 @@
-import { connectToDatabase } from '@/app/api/db/mongodb';
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs'; // Import bcrypt for password hashing
+import { connectToDatabase } from '../../db/mongodb';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request) {
   try {
-    const { username, password } = await request.json();
+    const { name, email, password } = await request.json();
     const db = await connectToDatabase();
 
-    // Hash the password before storing it
-    const salt = await bcrypt.genSalt(10); // Generate a salt
-    const hashedPassword = await bcrypt.hash(password, salt); // Hash the password
+    const existingUser = await db.collection('users').findOne({ email });
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 }
+      );
+    }
 
-    // Create new user with the hashed password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
     const result = await db.collection('users').insertOne({
-      username,
-      password: hashedPassword, // Store the hashed password
+      name,
+      email,
+      password: hashedPassword,
       createdAt: new Date(),
+      provider: 'email'
     });
 
-    // Return success response
-    return NextResponse.json({
-      success: true,
-      userId: result.insertedId,
-    });
-  } catch (error) {
-    console.error('Signup error:', error);
     return NextResponse.json(
-      { error: 'Failed to create account' },
+      { success: true },
+      { status: 201 }
+    );
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

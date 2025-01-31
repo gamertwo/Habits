@@ -1,10 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, Trash, Edit } from "lucide-react";
+import { Plus, Trash, Edit, LogOut, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function CreateHabit() {
   const router = useRouter();
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [habitData, setHabitData] = useState({
     name: "",
     category: "",
@@ -14,9 +15,9 @@ export default function CreateHabit() {
     completedDates: [],
   });
 
-  const [habits, setHabits] = useState([]); // State to store habits
+  const [habits, setHabits] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isEditing, setIsEditing] = useState(null); // Track habit being edited
+  const [isEditing, setIsEditing] = useState(null);
 
   const categories = [
     "Health & Fitness",
@@ -41,49 +42,42 @@ export default function CreateHabit() {
     "#EF4444", // Red
   ];
 
-  // Fetch habits on component mount
   useEffect(() => {
     fetchHabits();
   }, []);
 
-  // Fetch habits from the API
   const fetchHabits = async () => {
     try {
       const response = await fetch("/api/habits", {
-        credentials: "include", // Include cookies
+        credentials: "include",
       });
       const data = await response.json();
       if (response.ok) {
         setHabits(data);
-      } else {
-        console.error("Error fetching habits:", data.error);
       }
     } catch (error) {
       console.error("Error fetching habits:", error);
     }
   };
 
-  // Handle form submission (create or update habit)
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
       const response = await fetch("/api/habits", {
         method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Include cookies
+        credentials: "include",
         body: JSON.stringify({
           ...habitData,
-          id: isEditing, // Include habit ID if editing
+          id: isEditing,
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Reset form and fetch updated habits
         setHabitData({
           name: "",
           category: "",
@@ -94,18 +88,13 @@ export default function CreateHabit() {
         });
         setIsEditing(null);
         await fetchHabits();
-        router.push("/progress"); // Redirect to progress page
-      } else {
-        console.error("Error saving habit:", data.error);
-        alert("Failed to save habit. Please try again.");
+        router.push("/progress");
       }
     } catch (error) {
       console.error("Error saving habit:", error);
-      alert("An error occurred. Please try again.");
     }
   };
 
-  // Handle editing a habit
   const handleEdit = (habit) => {
     setHabitData({
       name: habit.name,
@@ -115,41 +104,75 @@ export default function CreateHabit() {
       color: habit.color,
       completedDates: habit.completedDates,
     });
-    setIsEditing(habit._id); // Set the habit ID being edited
+    setIsEditing(habit._id);
   };
 
-  // Handle deleting a habit
   const handleDelete = async (id) => {
     try {
       const response = await fetch(`/api/habits?id=${id}`, {
         method: "DELETE",
-        credentials: "include", // Include cookies
+        credentials: "include",
       });
-
-      const data = await response.json();
-
       if (response.ok) {
-        await fetchHabits(); // Fetch updated habits
-        alert("Habit deleted successfully!");
-      } else {
-        console.error("Error deleting habit:", data.error);
-        alert("Failed to delete habit. Please try again.");
+        await fetchHabits();
       }
     } catch (error) {
       console.error("Error deleting habit:", error);
-      alert("An error occurred. Please try again.");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (response.ok) {
+        router.push('/login');
+      }
+    } catch (error) {
+      console.error('Logout failed:', error);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-md mx-auto">
-        <div className="flex items-center gap-2 mb-6">
-          <Plus className="h-6 w-6 text-blue-400" />
-          <h1 className="text-2xl font-bold text-gray-100">
-            {isEditing ? "Edit Habit" : "Create New Habit"}
-          </h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Plus className="h-6 w-6 text-blue-400" />
+            <h1 className="text-2xl font-bold text-gray-100">
+              {isEditing ? "Edit Habit" : "Create New Habit"}
+            </h1>
+          </div>
+          
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="md:hidden p-2 text-gray-300 hover:text-white"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="hidden md:flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+            <span>Logout</span>
+          </button>
         </div>
+
+        {showMobileMenu && (
+          <div className="md:hidden mb-6 bg-gray-800 rounded-lg p-4">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <LogOut className="h-5 w-5" />
+              <span>Logout</span>
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
@@ -167,9 +190,7 @@ export default function CreateHabit() {
               <input
                 type="text"
                 value={habitData.name}
-                onChange={(e) =>
-                  setHabitData({ ...habitData, name: e.target.value })
-                }
+                onChange={(e) => setHabitData({ ...habitData, name: e.target.value })}
                 className="flex-1 p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
                 placeholder="Enter habit name"
                 required
@@ -201,9 +222,7 @@ export default function CreateHabit() {
             </label>
             <select
               value={habitData.category}
-              onChange={(e) =>
-                setHabitData({ ...habitData, category: e.target.value })
-              }
+              onChange={(e) => setHabitData({ ...habitData, category: e.target.value })}
               className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
               required
             >
@@ -225,12 +244,10 @@ export default function CreateHabit() {
               min="1"
               max="10"
               value={habitData.maxCheckOffs}
-              onChange={(e) =>
-                setHabitData({
-                  ...habitData,
-                  maxCheckOffs: parseInt(e.target.value),
-                })
-              }
+              onChange={(e) => setHabitData({
+                ...habitData,
+                maxCheckOffs: parseInt(e.target.value),
+              })}
               className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
               required
             />
@@ -263,7 +280,6 @@ export default function CreateHabit() {
           </button>
         </form>
 
-        {/* List of Habits */}
         <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-100 mb-4">Your Habits</h2>
           {habits.map((habit) => (

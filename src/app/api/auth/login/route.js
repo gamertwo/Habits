@@ -1,57 +1,48 @@
-import { connectToDatabase } from '@/app/api/db/mongodb';
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs'; // For password hashing and comparison
+import { connectToDatabase } from '../../db/mongodb';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request) {
   try {
-    const { username, password } = await request.json();
-    console.log('Login attempt:', { username });
-
+    const { email, password } = await request.json();
     const db = await connectToDatabase();
-    const user = await db.collection('users').findOne({ username });
-
-    // Check if user exists
+    
+    const user = await db.collection('users').findOne({ email });
+    
     if (!user) {
       return NextResponse.json(
-        { message: 'Invalid credentials' },
+        { error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    
+    if (!isValidPassword) {
       return NextResponse.json(
-        { message: 'Invalid credentials' },
+        { error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    // Create response object
-    const response = NextResponse.json({
-      success: true,
-      user: {
-        id: user._id.toString(),
-        username: user.username,
-      },
-    });
+    const response = NextResponse.json(
+      { success: true },
+      { status: 200 }
+    );
 
-    // Set the userId cookie with proper configuration
-    response.cookies.set({
-      name: 'userId',
-      value: user._id.toString(),
-      httpOnly: true, // Prevent client-side access
-      secure: process.env.NODE_ENV === 'production', // Secure in production
-      sameSite: 'lax', // Prevent CSRF attacks
-      path: '/', // Accessible across the entire site
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+    response.cookies.set('userId', user._id.toString(), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60
     });
 
     return response;
+
   } catch (error) {
-    console.error('Login error:', error);
     return NextResponse.json(
-      { message: 'Server error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

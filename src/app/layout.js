@@ -1,31 +1,25 @@
-"use client"
-import localFont from "next/font/local";
-import "./globals.css";
-import { SessionProvider } from "next-auth/react";
-import Navbar from "@/components/Navbar";
+import { Inter } from 'next/font/google';
+import { AuthProvider } from './contexts/AuthContext';
+import './globals.css';
+import Navbar from '../components/Navbar';
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
+const inter = Inter({ subsets: ['latin'] });
 
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
+export const metadata = {
+  title: 'Authentication App',
+  description: 'A secure authentication system',
+};
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900`}>
-        <SessionProvider>
-          <main className="pb-20">
+      <body className={inter.className}>
+        <AuthProvider>
+          <Navbar />
+          <main className="pb-16">
             {children}
           </main>
-          <Navbar />
-        </SessionProvider>
+        </AuthProvider>
       </body>
     </html>
   );
