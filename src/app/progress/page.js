@@ -239,3 +239,5 @@ const HabitGrid = ({ habit, year }) => {
     </Card>
   );
 };
+
+

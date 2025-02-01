@@ -6,14 +6,17 @@ import { useRouter } from "next/navigation";
 export default function CreateHabit() {
   const router = useRouter();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [habitData, setHabitData] = useState({
-    name: "",
-    category: "",
-    emoji: "",
-    maxCheckOffs: 1,
-    color: "#10B981",
-    completedDates: [],
-  });
+  // In CreateHabit.js, update habitData state
+const [habitData, setHabitData] = useState({
+  name: "",
+  category: "",
+  emoji: "",
+  maxCheckOffs: 1,
+  color: "#10B981",
+  completedDates: [],
+  xpPerCompletion: 50, // Default XP value
+});
+
 
   const [habits, setHabits] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -253,6 +256,25 @@ export default function CreateHabit() {
               required
             />
           </div>
+          <div className="space-y-2">
+  <label className="block text-sm font-medium text-gray-200">
+    XP Per Completion
+  </label>
+  <input
+    type="number"
+    min="10"
+    max="1000"
+    value={habitData.xpPerCompletion}
+    onChange={(e) => setHabitData({
+      ...habitData,
+      xpPerCompletion: parseInt(e.target.value),
+    })}
+    className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
+    required
+  />
+  <p className="text-xs text-gray-400">Amount of XP earned each time this habit is completed</p>
+</div>
+
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-200">

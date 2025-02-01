@@ -1,7 +1,7 @@
 "use client"
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Calendar, Plus, LogIn, BarChart, LineChart } from "lucide-react";
+import { Calendar, Plus, LogIn, BarChart, LineChart, Sword,Trophy } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -17,25 +17,32 @@ export default function Navbar() {
           <LogIn className="h-6 w-6" />
           <span className="text-xs">Login</span>
         </Link>
-        
-       
-        
-        <Link href="/progress" className={`flex flex-col items-center gap-1 ${isActive('/progress')}`}>
-          <BarChart className="h-6 w-6" />
-          <span className="text-xs">Progress</span>
-        </Link>
         <Link href="/" className={`flex flex-col items-center gap-1 ${isActive('/')}`}>
           <Plus className="h-6 w-6" />
           <span className="text-xs">Create</span>
         </Link>
         <Link href="/weekly" className={`flex flex-col items-center gap-1 ${isActive('/weekly')}`}>
-  <Calendar className="h-6 w-6" />
-  <span className="text-xs">Weekly</span>
-</Link>
+          <Calendar className="h-6 w-6" />
+          <span className="text-xs">Weekly</span>
+        </Link>
+        <Link href="/progress" className={`flex flex-col items-center gap-1 ${isActive('/progress')}`}>
+          <BarChart className="h-6 w-6" />
+          <span className="text-xs">Progress</span>
+        </Link>
+
+      
+      
+        
+        <Link href="/rpg-progress" className={`flex flex-col items-center gap-1 ${isActive('/rpg-progress')}`}>
+          <Sword className="h-6 w-6" />
+          <span className="text-xs">RPG</span>
+        </Link>
+
         <Link href="/analytics" className={`flex flex-col items-center gap-1 ${isActive('/analytics')}`}>
           <LineChart className="h-6 w-6" />
           <span className="text-xs">Analytics</span>
         </Link>
+      
       </div>
     </nav>
   );
