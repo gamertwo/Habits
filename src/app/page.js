@@ -137,6 +137,7 @@ export default function CreateHabit() {
 
   return (
     <div className="min-h-screen bg-gray-900 p-4">
+        
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
