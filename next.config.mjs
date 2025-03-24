@@ -1,4 +1,12 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
-
-export default nextConfig;
+const nextConfig = {
+    webpack: (config) => {
+      config.resolve.fallback = {
+        canvas: false, // Prevents webpack from bundling canvas
+      };
+      return config;
+    },
+  };
+  
+  export default nextConfig;
+  
