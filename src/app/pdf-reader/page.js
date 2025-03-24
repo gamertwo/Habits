@@ -2,10 +2,12 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
 import * as pdfjs from 'pdfjs-dist';
+import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.entry';
 
+GlobalWorkerOptions.workerSrc = pdfWorker;
 // Ensure the PDF.js worker is properly set up
 const pdfjsVersion = '3.4.120';
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`;
 
 export default function PDFReader() {
   const [pdfDocument, setPdfDocument] = useState(null);
