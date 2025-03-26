@@ -58,7 +58,7 @@ const SearchBar = ({
           </div>
           <div className={`mt-2 p-2 rounded-md text-sm ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`}>
             <p>
-              <span className="font-medium">Context:</span> "...{searchResults[currentSearchIndex].context}..."
+              <span className="font-medium">Context:</span> ...{searchResults[currentSearchIndex].context}...
             </p>
             <p className="text-xs mt-1 opacity-70">
               Page {searchResults[currentSearchIndex].page}
