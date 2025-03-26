@@ -1,6 +1,16 @@
-// pages/pdf-reader.js
 "use client";
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import PDFContainer from './components/PDFContainer';
+import Header from './components/Header';
+import FileUpload from './components/FileUpload';
+import SearchBar from './components/SearchBar';
+import MainContent from './components/MainContent';
+import ThumbnailsRow from './components/ThumbnailsRow';
+import StatsDisplay from './components/StatsDisplay';
+import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
+import BookmarkModal from './components/BookmarkModal';
+import useLocalStorage from './hooks/useLocalStorage';
+import usePDFDocument from './hooks/usePDFDocument';
 import * as pdfjs from 'pdfjs-dist';
 import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.entry';
@@ -9,190 +19,94 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 // Ensure the PDF.js worker is properly set up
 const pdfjsVersion = '3.4.120';
 
-export default function PDFReader() {
-  const [pdfDocument, setPdfDocument] = useState(null);
-  const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageText, setPageText] = useState([]);
-  const [currentLineIndex, setCurrentLineIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [fileName, setFileName] = useState('');
+export default function PDFReaderPage() {
+  // Theme state
+  const [theme, setTheme] = useLocalStorage('pdfReaderTheme', 'dark');
+  const [fontScale, setFontScale] = useLocalStorage('pdfReaderFontScale', 1);
+  const [recentPdfs, setRecentPdfs] = useLocalStorage('recentPdfs', []);
+  
+  // PDF document state
+  const {
+    pdfDocument, 
+    numPages, 
+    currentPage,
+    fileName,
+    isLoading,
+    pageText,
+    currentLineIndex,
+    fullPageText,
+    readingStats,
+    thumbnails,
+    pdfOutline,
+    loadPDF,
+    jumpToPage,
+    loadPageText,
+    goToNextLine,
+    goToPreviousLine,
+    setCurrentLineIndex,
+    downloadAsText,
+    downloadStats,
+    formatTime,
+    generateThumbnails,
+    renderPageThumbnail
+  } = usePDFDocument(setRecentPdfs, recentPdfs);
+  
+  // UI state
+  const [viewMode, setViewMode] = useState('line'); // line or page
+  const [showThumbnails, setShowThumbnails] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [showBookmarkModal, setShowBookmarkModal] = useState(false);
   const [autoplayEnabled, setAutoplayEnabled] = useState(false);
-  const [autoplaySpeed, setAutoplaySpeed] = useState(1000); // Faster default speed - 1 second
+  const [autoplaySpeed, setAutoplaySpeed] = useState(1000);
   const [autoplayIntervalId, setAutoplayIntervalId] = useState(null);
-  const [fontScale, setFontScale] = useState(1);
-  const fileInputRef = useRef(null);
-  const lineDisplayRef = useRef(null);
-
-  // Enhanced text extraction with better positioning information
-  const extractPageText = async (pageNum) => {
-    if (!pdfDocument || pageNum < 1 || pageNum > numPages) return [];
-    
-    try {
-      const page = await pdfDocument.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const viewport = page.getViewport({ scale: 1.0 });
-      
-      // Sort text items by their vertical position first, then by horizontal position
-      const items = [...textContent.items];
-      
-      // Group items by lines based on y-position (with a tolerance for small differences)
-      const yPositionGroups = {};
-      const tolerance = 5; // pixels tolerance for considering items on the same line
-      
-      items.forEach(item => {
-        const y = Math.round(viewport.height - item.transform[5] / tolerance) * tolerance;
-        if (!yPositionGroups[y]) {
-          yPositionGroups[y] = [];
-        }
-        yPositionGroups[y].push(item);
-      });
-      
-      // Sort each group by x-position and concatenate the text
-      const lines = Object.keys(yPositionGroups)
-        .sort((a, b) => a - b) // Sort lines by y-position (top to bottom)
-        .map(y => {
-          const lineItems = yPositionGroups[y].sort((a, b) => a.transform[4] - b.transform[4]);
-          // Join items with appropriate spacing based on positions
-          let lineText = '';
-          let lastEndX = 0;
-          
-          lineItems.forEach((item, idx) => {
-            const itemStartX = item.transform[4];
-            if (idx > 0 && itemStartX - lastEndX > 10) {
-              // Add space if there's a gap between items
-              lineText += ' ';
-            }
-            lineText += item.str;
-            lastEndX = itemStartX + (item.width || 0);
-          });
-          
-          return lineText.trim();
-        })
-        .filter(line => line.length > 0); // Remove empty lines
-      
-      return lines;
-    } catch (error) {
-      console.error(`Error extracting text from page ${pageNum}:`, error);
-      return [];
-    }
+  
+  // Search state
+  const [searchText, setSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // Bookmarks state
+  const [bookmarks, setBookmarks] = useState([]);
+  const [bookmarkName, setBookmarkName] = useState('');
+  
+  // Notes state
+  const [notes, setNotes] = useState({});
+  const [currentNote, setCurrentNote] = useState('');
+  
+  // Utility functions for theme
+  const getBackgroundClasses = () => {
+    return theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900';
+  };
+  
+  const getCardClasses = () => {
+    return theme === 'dark' ? 'bg-gray-800' : 'bg-white border border-gray-200';
+  };
+  
+  const getPrimaryButtonClasses = () => {
+    return theme === 'dark' 
+      ? 'bg-blue-700 hover:bg-blue-600 text-white' 
+      : 'bg-blue-600 hover:bg-blue-500 text-white';
   };
 
-  // Load page text and manage state
-  const loadPageText = async (pageNum) => {
-    if (!pdfDocument || pageNum < 1 || pageNum > numPages) return;
-    
-    setIsLoading(true);
-    try {
-      const lines = await extractPageText(pageNum);
-      setPageText(lines);
-      setCurrentLineIndex(0);
-      setCurrentPage(pageNum);
-    } catch (error) {
-      console.error('Error loading page text:', error);
-      alert('Error extracting text from this page. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  const getSecondaryButtonClasses = () => {
+    return theme === 'dark'
+      ? 'bg-gray-700 hover:bg-gray-600 text-white border border-gray-600'
+      : 'bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300';
+  };
+  
+  // Toggle theme
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
   };
 
-  // Handle line navigation with auto-progression to next page
-  const goToNextLine = async () => {
-    if (currentLineIndex < pageText.length - 1) {
-      // Move to next line on current page
-      setCurrentLineIndex(currentLineIndex + 1);
-    } else if (currentPage < numPages) {
-      // Reached the end of the page, move to the next page
-      setIsLoading(true);
-      const nextPage = currentPage + 1;
-      const nextPageLines = await extractPageText(nextPage);
-      setPageText(nextPageLines);
-      setCurrentLineIndex(0);
-      setCurrentPage(nextPage);
-      setIsLoading(false);
-    }
+  // Toggle view mode
+  const toggleViewMode = () => {
+    const newMode = viewMode === 'line' ? 'page' : 'line';
+    setViewMode(newMode);
   };
-
-  const goToPreviousLine = async () => {
-    if (currentLineIndex > 0) {
-      // Move to previous line on current page
-      setCurrentLineIndex(currentLineIndex - 1);
-    } else if (currentPage > 1) {
-      // Reached the start of the page, move to the previous page
-      setIsLoading(true);
-      const prevPage = currentPage - 1;
-      const prevPageLines = await extractPageText(prevPage);
-      setPageText(prevPageLines);
-      setCurrentLineIndex(Math.max(0, prevPageLines.length - 1));
-      setCurrentPage(prevPage);
-      setIsLoading(false);
-    }
-  };
-
-  // Handle PDF upload
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Please select a valid PDF file');
-      return;
-    }
-
-    setIsLoading(true);
-    setFileName(file.name);
-    
-    try {
-      const fileReader = new FileReader();
-      fileReader.onload = async function() {
-        const typedArray = new Uint8Array(this.result);
-        const loadingTask = pdfjs.getDocument(typedArray);
-        const pdf = await loadingTask.promise;
-        
-        setPdfDocument(pdf);
-        setNumPages(pdf.numPages);
-        
-        // Automatically load the first page
-        const firstPageLines = await extractPageText(1);
-        setPageText(firstPageLines);
-        setCurrentPage(1);
-        setCurrentLineIndex(0);
-        
-        setIsLoading(false);
-      };
-      fileReader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error('Error loading PDF:', error);
-      setIsLoading(false);
-      alert('Error loading PDF. Please try again.');
-    }
-  };
-
-  // Jump to specific page
-  const jumpToPage = async (pageNum) => {
-    if (!pdfDocument || pageNum < 1 || pageNum > numPages) return;
-    
-    setIsLoading(true);
-    try {
-      await loadPageText(pageNum);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Autoplay functionality
-  useEffect(() => {
-    if (autoplayEnabled) {
-      const interval = setInterval(() => {
-        goToNextLine();
-      }, autoplaySpeed);
-      setAutoplayIntervalId(interval);
-      
-      return () => clearInterval(interval);
-    } else if (autoplayIntervalId) {
-      clearInterval(autoplayIntervalId);
-      setAutoplayIntervalId(null);
-    }
-  }, [autoplayEnabled, autoplaySpeed, currentLineIndex, currentPage, pageText]);
-
+  
   // Toggle autoplay
   const toggleAutoplay = () => {
     setAutoplayEnabled(!autoplayEnabled);
@@ -207,32 +121,177 @@ export default function PDFReader() {
   const changeTextSize = (scale) => {
     setFontScale(scale);
   };
-
-  // Function to download current text as TXT
-  const downloadAsText = () => {
-    if (!pdfDocument || pageText.length === 0) return;
+  
+  // Search functionality
+  const searchInDocument = async () => {
+    if (!searchText.trim() || !pdfDocument) return;
     
-    const textContent = pageText.join('\n');
-    const blob = new Blob([textContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fileName.replace('.pdf', '')}_page${currentPage}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setIsSearching(true);
+    const results = [];
+    
+    try {
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdfDocument.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        
+        let startIndex = 0;
+        let index;
+        
+        // Find all occurrences in this page
+        while ((index = pageText.toLowerCase().indexOf(searchText.toLowerCase(), startIndex)) !== -1) {
+          results.push({
+            page: i,
+            index: index,
+            context: pageText.substr(Math.max(0, index - 40), searchText.length + 80)
+          });
+          startIndex = index + searchText.length;
+        }
+      }
+      
+      setSearchResults(results);
+      if (results.length > 0) {
+        setCurrentSearchIndex(0);
+        // Jump to first result
+        jumpToPage(results[0].page);
+      }
+    } catch (error) {
+      console.error('Error searching document:', error);
+    } finally {
+      setIsSearching(false);
+    }
   };
-
-  // Get button classes
-  const getPrimaryButtonClasses = () => {
-    return 'bg-blue-700 hover:bg-blue-600 text-white';
+  
+  const goToNextSearchResult = () => {
+    if (searchResults.length === 0) return;
+    
+    const nextIndex = (currentSearchIndex + 1) % searchResults.length;
+    setCurrentSearchIndex(nextIndex);
+    jumpToPage(searchResults[nextIndex].page);
   };
-
-  const getSecondaryButtonClasses = () => {
-    return 'bg-gray-700 hover:bg-gray-600 text-white border border-gray-600';
+  
+  const goToPrevSearchResult = () => {
+    if (searchResults.length === 0) return;
+    
+    const prevIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentSearchIndex(prevIndex);
+    jumpToPage(searchResults[prevIndex].page);
   };
-
+  
+  // Bookmarks functionality
+  const addBookmark = () => {
+    if (!pdfDocument) return;
+    
+    const newBookmark = {
+      id: Date.now(),
+      name: bookmarkName || `Page ${currentPage}, Line ${currentLineIndex + 1}`,
+      page: currentPage,
+      lineIndex: currentLineIndex,
+      pdfName: fileName,
+      createdAt: new Date().toISOString()
+    };
+    
+    const updatedBookmarks = [...bookmarks, newBookmark];
+    setBookmarks(updatedBookmarks);
+    
+    // Save to localStorage
+    const allBookmarks = JSON.parse(localStorage.getItem('pdfBookmarks') || '{}');
+    allBookmarks[fileName] = updatedBookmarks;
+    localStorage.setItem('pdfBookmarks', JSON.stringify(allBookmarks));
+    
+    setBookmarkName('');
+    setShowBookmarkModal(false);
+  };
+  
+  const removeBookmark = (bookmarkId) => {
+    const updatedBookmarks = bookmarks.filter(b => b.id !== bookmarkId);
+    setBookmarks(updatedBookmarks);
+    
+    // Update localStorage
+    const allBookmarks = JSON.parse(localStorage.getItem('pdfBookmarks') || '{}');
+    allBookmarks[fileName] = updatedBookmarks;
+    localStorage.setItem('pdfBookmarks', JSON.stringify(allBookmarks));
+  };
+  
+  const loadBookmarks = (pdfName) => {
+    const allBookmarks = JSON.parse(localStorage.getItem('pdfBookmarks') || '{}');
+    const pdfBookmarks = allBookmarks[pdfName] || [];
+    setBookmarks(pdfBookmarks);
+  };
+  
+  const goToBookmark = (bookmark) => {
+    jumpToPage(bookmark.page);
+    // We need to wait for the page to load before setting line index
+    setTimeout(() => {
+      setCurrentLineIndex(bookmark.lineIndex);
+    }, 500);
+  };
+  
+  // Notes functionality
+  const saveNote = () => {
+    if (!currentNote.trim() || !pdfDocument) return;
+    
+    const pageNotes = {...notes};
+    if (!pageNotes[currentPage]) {
+      pageNotes[currentPage] = [];
+    }
+    
+    const newNote = {
+      id: Date.now(),
+      text: currentNote,
+      lineIndex: currentLineIndex,
+      createdAt: new Date().toISOString()
+    };
+    
+    pageNotes[currentPage].push(newNote);
+    setNotes(pageNotes);
+    setCurrentNote('');
+    
+    // Save to localStorage
+    const allNotes = JSON.parse(localStorage.getItem('pdfNotes') || '{}');
+    if (!allNotes[fileName]) {
+      allNotes[fileName] = {};
+    }
+    allNotes[fileName] = pageNotes;
+    localStorage.setItem('pdfNotes', JSON.stringify(allNotes));
+  };
+  
+  const deleteNote = (noteId) => {
+    const pageNotes = {...notes};
+    if (!pageNotes[currentPage]) return;
+    
+    pageNotes[currentPage] = pageNotes[currentPage].filter(note => note.id !== noteId);
+    setNotes(pageNotes);
+    
+    // Update localStorage
+    const allNotes = JSON.parse(localStorage.getItem('pdfNotes') || '{}');
+    if (allNotes[fileName]) {
+      allNotes[fileName] = pageNotes;
+      localStorage.setItem('pdfNotes', JSON.stringify(allNotes));
+    }
+  };
+  
+  const loadNotes = (pdfName) => {
+    const allNotes = JSON.parse(localStorage.getItem('pdfNotes') || '{}');
+    const pdfNotes = allNotes[pdfName] || {};
+    setNotes(pdfNotes);
+  };
+  
+  // Autoplay functionality
+  useEffect(() => {
+    if (autoplayEnabled) {
+      const interval = setInterval(() => {
+        goToNextLine();
+      }, autoplaySpeed);
+      setAutoplayIntervalId(interval);
+      
+      return () => clearInterval(interval);
+    } else if (autoplayIntervalId) {
+      clearInterval(autoplayIntervalId);
+      setAutoplayIntervalId(null);
+    }
+  }, [autoplayEnabled, autoplaySpeed, currentLineIndex, currentPage, pageText]);
+  
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -243,253 +302,157 @@ export default function PDFReader() {
       } else if (e.key === ' ') {
         toggleAutoplay();
         e.preventDefault();
+      } else if (e.key === 'b' && e.ctrlKey) {
+        // Ctrl+B to add bookmark
+        setShowBookmarkModal(true);
+        e.preventDefault();
+      } else if (e.key === 'f' && e.ctrlKey) {
+        // Ctrl+F to focus search
+        document.getElementById('search-input')?.focus();
+        e.preventDefault();
+      } else if (e.key === 'n' && e.ctrlKey) {
+        // Ctrl+N to toggle notes
+        setShowNotes(!showNotes);
+        e.preventDefault();
+      } else if (e.key === 't' && e.ctrlKey) {
+        // Ctrl+T to toggle theme
+        toggleTheme();
+        e.preventDefault();
+      } else if (e.key === 'v' && e.ctrlKey) {
+        // Ctrl+V to toggle view mode
+        toggleViewMode();
+        e.preventDefault();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentLineIndex, currentPage, pageText]);
-
+  }, [currentLineIndex, currentPage, pageText, showNotes, theme, viewMode]);
+  
   return (
-    <div className="min-h-screen p-6 bg-gray-900 text-white">
-      <div className="max-w-4xl mx-auto rounded-lg shadow-lg p-6 bg-gray-800">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">PDF Line Reader</h1>
-        </div>
-        
-        {/* File Upload Section */}
-        <div className="mb-6 p-4 border rounded-lg bg-gray-700 bg-opacity-40">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between">
-            <label className="block text-sm font-medium mb-2">Upload PDF Document</label>
-            <div className="flex items-center">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept="application/pdf"
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current.click()}
-                className={`px-4 py-2 rounded-md ${getPrimaryButtonClasses()} mr-2`}
-              >
-                Select PDF
-              </button>
-            </div>
-          </div>
-          
-          {pdfDocument && (
-            <div className="mt-3">
-              <p className="text-sm">
-                <span className="font-medium">File:</span> {fileName}
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Pages:</span> {numPages}
-              </p>
-            </div>
-          )}
-        </div>
-        
-        {/* Navigation Controls */}
-        {pdfDocument && (
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 border rounded-lg bg-gray-700 bg-opacity-40">
-              <h3 className="font-medium mb-3">Page Navigation</h3>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => jumpToPage(1)}
-                  disabled={currentPage === 1 || isLoading}
-                  className={`px-3 py-1 rounded-md ${getSecondaryButtonClasses()} disabled:opacity-50`}
-                >
-                  First
-                </button>
-                <button
-                  onClick={() => jumpToPage(currentPage - 1)}
-                  disabled={currentPage === 1 || isLoading}
-                  className={`px-3 py-1 rounded-md ${getSecondaryButtonClasses()} disabled:opacity-50`}
-                >
-                  Prev Page
-                </button>
-                <div className="flex items-center mx-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max={numPages}
-                    value={currentPage}
-                    onChange={(e) => {
-                      const page = parseInt(e.target.value);
-                      if (page > 0 && page <= numPages) {
-                        jumpToPage(page);
-                      }
-                    }}
-                    className="w-16 px-2 py-1 border rounded-md text-center bg-gray-700 border-gray-600"
-                  />
-                  <span className="mx-1">/ {numPages}</span>
-                </div>
-                <button
-                  onClick={() => jumpToPage(currentPage + 1)}
-                  disabled={currentPage === numPages || isLoading}
-                  className={`px-3 py-1 rounded-md ${getSecondaryButtonClasses()} disabled:opacity-50`}
-                >
-                  Next Page
-                </button>
-                <button
-                  onClick={() => jumpToPage(numPages)}
-                  disabled={currentPage === numPages || isLoading}
-                  className={`px-3 py-1 rounded-md ${getSecondaryButtonClasses()} disabled:opacity-50`}
-                >
-                  Last
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-4 border rounded-lg bg-gray-700 bg-opacity-40">
-              <h3 className="font-medium mb-3">Reading Options</h3>
-              <div className="flex flex-col space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Autoplay:</span>
-                  <button
-                    onClick={toggleAutoplay}
-                    className={`px-3 py-1 rounded-md ${autoplayEnabled ? 'bg-green-600 hover:bg-green-700 text-white' : getSecondaryButtonClasses()}`}
-                  >
-                    {autoplayEnabled ? 'Pause' : 'Play'}
-                  </button>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Speed:</span>
-                  <div className="flex items-center w-2/3">
-                    <span className="text-xs mr-2">Fast</span>
-                    <input
-                      type="range"
-                      min="200"  // Faster minimum speed (200ms)
-                      max="2000" // Lower maximum for faster speed overall
-                      step="100"
-                      value={autoplaySpeed}
-                      onChange={handleSpeedChange}
-                      className="w-full"
-                    />
-                    <span className="text-xs ml-2">Slow</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Text Size:</span>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => changeTextSize(Math.max(0.8, fontScale - 0.2))}
-                      className={`px-2 py-1 rounded-md ${getSecondaryButtonClasses()}`}
-                    >
-                      A-
-                    </button>
-                    <button
-                      onClick={() => changeTextSize(1)}
-                      className={`px-2 py-1 rounded-md ${getSecondaryButtonClasses()}`}
-                    >
-                      Reset
-                    </button>
-                    <button
-                      onClick={() => changeTextSize(Math.min(2, fontScale + 0.2))}
-                      className={`px-2 py-1 rounded-md ${getSecondaryButtonClasses()}`}
-                    >
-                      A+
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Text Display Section */}
-        {pdfDocument && (
-          <div className="mb-6">
-            <div className="flex justify-between mb-2">
-              <div className="flex items-center">
-                <span className="mr-2">Line:</span>
-                <span className="font-medium">{currentLineIndex + 1}</span>
-                <span className="mx-1">of</span>
-                <span className="font-medium">{pageText.length}</span>
-              </div>
-              
-              <div className="flex items-center">
-                <span className="mr-2">Page:</span>
-                <span className="font-medium">{currentPage}</span>
-                <span className="mx-1">of</span>
-                <span className="font-medium">{numPages}</span>
-              </div>
-            </div>
-            
-            {/* Line navigation controls */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center">
-                <button
-                  onClick={goToPreviousLine}
-                  disabled={currentPage === 1 && currentLineIndex === 0}
-                  className={`px-4 py-2 rounded-md ${getPrimaryButtonClasses()} disabled:opacity-50 mr-2`}
-                >
-                  ← Previous Line
-                </button>
-                <button
-                  onClick={goToNextLine}
-                  disabled={currentPage === numPages && currentLineIndex === pageText.length - 1}
-                  className={`px-4 py-2 rounded-md ${getPrimaryButtonClasses()} disabled:opacity-50`}
-                >
-                  Next Line →
-                </button>
-              </div>
-              
-              <button
-                onClick={downloadAsText}
-                disabled={pageText.length === 0}
-                className={`px-3 py-1 rounded-md ${getSecondaryButtonClasses()} disabled:opacity-50`}
-              >
-                Download Text
-              </button>
-            </div>
-            
-            {/* Current line display */}
-            <div 
-              ref={lineDisplayRef}
-              className="p-6 border rounded-lg min-h-16 flex items-center justify-center bg-gray-700 border-gray-600"
-              style={{
-                fontSize: `${Math.max(1, 1.2 * fontScale)}rem`,
-                lineHeight: '1.6'
-              }}
-            >
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <div className="w-12 h-12 border-4 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-                  <p>Loading content...</p>
-                </div>
-              ) : pageText.length > 0 ? (
-                <p className="text-center">{pageText[currentLineIndex]}</p>
-              ) : (
-                <p className="text-center text-gray-500">No text content found on this page</p>
-              )}
-            </div>
-            
-            {/* Keyboard shortcuts info */}
-            <div className="mt-4 text-sm text-center text-gray-400">
-              <p>Keyboard shortcuts: <span className="font-medium">← →</span> arrows to navigate, <span className="font-medium">Space</span> to toggle autoplay</p>
-            </div>
-          </div>
-        )}
-        
-        {/* Initial instructions */}
-        {!pdfDocument && !isLoading && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 2v5a2 2 0 002 2h5" />
-            </svg>
-            <h2 className="text-xl font-medium mb-2">Upload a PDF to get started</h2>
-            <p className="text-gray-400 max-w-md">
-              Upload a PDF document to read it line by line. Navigate using arrow keys or buttons.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+    <PDFContainer 
+      backgroundClasses={getBackgroundClasses()}
+      cardClasses={getCardClasses()}
+    >
+      <Header 
+        title="Enhanced PDF Line Reader"
+        toggleTheme={toggleTheme}
+        toggleViewMode={toggleViewMode}
+        viewMode={viewMode}
+        theme={theme}
+        getSecondaryButtonClasses={getSecondaryButtonClasses}
+      />
+      
+      <FileUpload 
+        theme={theme}
+        pdfDocument={pdfDocument}
+        fileName={fileName}
+        numPages={numPages}
+        readingStats={readingStats}
+        formatTime={formatTime}
+        recentPdfs={recentPdfs}
+        loadPDF={loadPDF}
+        loadBookmarks={loadBookmarks}
+        loadNotes={loadNotes}
+        getPrimaryButtonClasses={getPrimaryButtonClasses}
+      />
+      
+      {pdfDocument && (
+        <SearchBar 
+          theme={theme}
+          searchText={searchText}
+          setSearchText={setSearchText}
+          searchInDocument={searchInDocument}
+          isSearching={isSearching}
+          searchResults={searchResults}
+          currentSearchIndex={currentSearchIndex}
+          goToNextSearchResult={goToNextSearchResult}
+          goToPrevSearchResult={goToPrevSearchResult}
+          getPrimaryButtonClasses={getPrimaryButtonClasses}
+          getSecondaryButtonClasses={getSecondaryButtonClasses}
+        />
+      )}
+      
+      {pdfDocument && (
+        <MainContent 
+          theme={theme}
+          pdfDocument={pdfDocument}
+          isLoading={isLoading}
+          viewMode={viewMode}
+          pageText={pageText}
+          currentLineIndex={currentLineIndex}
+          fullPageText={fullPageText}
+          fontScale={fontScale}
+          currentPage={currentPage}
+          numPages={numPages}
+          autoplayEnabled={autoplayEnabled}
+          autoplaySpeed={autoplaySpeed}
+          jumpToPage={jumpToPage}
+          toggleAutoplay={toggleAutoplay}
+          handleSpeedChange={handleSpeedChange}
+          changeTextSize={changeTextSize}
+          goToNextLine={goToNextLine}
+          goToPreviousLine={goToPreviousLine}
+          setShowThumbnails={setShowThumbnails}
+          showThumbnails={showThumbnails}
+          setShowNotes={setShowNotes}
+          showNotes={showNotes}
+          downloadStats={downloadStats}
+          downloadAsText={downloadAsText}
+          bookmarks={bookmarks}
+          setShowBookmarkModal={setShowBookmarkModal}
+          goToBookmark={goToBookmark}
+          removeBookmark={removeBookmark}
+          pdfOutline={pdfOutline}
+          notes={notes}
+          currentNote={currentNote}
+          setCurrentNote={setCurrentNote}
+          saveNote={saveNote}
+          deleteNote={deleteNote}
+          getCardClasses={getCardClasses}
+          getPrimaryButtonClasses={getPrimaryButtonClasses}
+          getSecondaryButtonClasses={getSecondaryButtonClasses}
+        />
+      )}
+      
+      {showThumbnails && thumbnails.length > 0 && (
+        <ThumbnailsRow 
+          thumbnails={thumbnails}
+          currentPage={currentPage}
+          theme={theme}
+          jumpToPage={jumpToPage}
+          getCardClasses={getCardClasses}
+        />
+      )}
+      
+      {pdfDocument && (
+        <StatsDisplay 
+          readingStats={readingStats}
+          numPages={numPages}
+          bookmarks={bookmarks}
+          formatTime={formatTime}
+          getCardClasses={getCardClasses}
+        />
+      )}
+      
+      <KeyboardShortcutsHelp 
+        getCardClasses={getCardClasses}
+      />
+      
+      {showBookmarkModal && (
+        <BookmarkModal 
+          theme={theme}
+          bookmarkName={bookmarkName}
+          setBookmarkName={setBookmarkName}
+          currentPage={currentPage}
+          currentLineIndex={currentLineIndex}
+          addBookmark={addBookmark}
+          setShowBookmarkModal={setShowBookmarkModal}
+          getCardClasses={getCardClasses}
+          getPrimaryButtonClasses={getPrimaryButtonClasses}
+          getSecondaryButtonClasses={getSecondaryButtonClasses}
+        />
+      )}
+    </PDFContainer>
   );
 }

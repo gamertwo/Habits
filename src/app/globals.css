@@ -65,3 +65,107 @@ body {
 .react-calendar__tile--now {
   background-color: #4b5563 !important; /* highlight for current date */
 }
+:root {
+  --scrollbar-thumb-dark: #4B5563;
+  --scrollbar-track-dark: #1F2937;
+  --scrollbar-thumb-light: #9CA3AF;
+  --scrollbar-track-light: #E5E7EB;
+}
+
+/* Custom scrollbar styling */
+.scrollbar-dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-dark::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-dark);
+  border-radius: 4px;
+}
+
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-dark);
+  border-radius: 4px;
+}
+
+.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
+.scrollbar-light::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-light::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-light);
+  border-radius: 4px;
+}
+
+.scrollbar-light::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-light);
+  border-radius: 4px;
+}
+
+.scrollbar-light::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
+/* Transition effects */
+.transition-colors {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+
+/* Loading animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Modal backdrop animation */
+.fixed {
+  position: fixed;
+}
+
+.inset-0 {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.bg-opacity-50 {
+  --tw-bg-opacity: 0.5;
+}
+
+/* Reading progress indicator */
+.progress-bar {
+  height: 4px;
+  background: linear-gradient(to right, #3B82F6 var(--progress), transparent 0);
+  transition: 0.3s;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 640px) {
+  .hidden-mobile {
+    display: none;
+  }
+  
+  .text-sm-mobile {
+    font-size: 0.875rem;
+  }
+  
+  .p-sm-mobile {
+    padding: 0.5rem;
+  }
+}
