@@ -13,11 +13,9 @@ import useLocalStorage from './hooks/useLocalStorage';
 import usePDFDocument from './hooks/usePDFDocument';
 import * as pdfjs from 'pdfjs-dist';
 import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.entry';
 
-GlobalWorkerOptions.workerSrc = pdfWorker;
-// Ensure the PDF.js worker is properly set up
-const pdfjsVersion = '3.4.120';
+// Properly configure PDF.js worker - Fixed for production deployment
+GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 export default function PDFReaderPage() {
   // Theme state
