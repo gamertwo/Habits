@@ -333,7 +333,7 @@ export default function Home() {
         
         {/* Quote */}
         <div className="mb-12 max-w-md text-center">
-          <p className="text-white text-lg italic opacity-80">"{currentQuote}"</p>
+          <p className="text-white text-lg italic opacity-80">{currentQuote}</p>
         </div>
         
         {/* Timer controls */}
