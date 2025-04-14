@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Settings, BarChart } from 'lucide-react';
 import Navbar from '../../components/Navbar';
+import SimplifiedMusicVisualizer from './MusicVisualizer';
 
 export default function Home() {
   // Timer states
@@ -11,8 +12,9 @@ export default function Home() {
   const [timerType, setTimerType] = useState('focus'); // focus, shortBreak, longBreak
   
   // Background states
-  const [backgroundType, setBackgroundType] = useState('gradient'); // gradient, image, gif
+  const [backgroundType, setBackgroundType] = useState('gradient'); // gradient, image, gif, visualizer
   const [backgroundUrl, setBackgroundUrl] = useState('');
+  const [showVisualizer, setShowVisualizer] = useState(false);
   const fileInputRef = useRef(null);
   
   // Progress tracking states
@@ -62,14 +64,20 @@ export default function Home() {
     ]
   };
   
-  // Get a random quote based on timer type
+  // Get a deterministic quote based on timer type
+  const getInitialQuote = (type) => {
+    // Always return the first quote for initial render to avoid hydration errors
+    return quotes[type][0];
+  };
+  
+  // Get a random quote based on timer type (for subsequent renders)
   const getRandomQuote = () => {
     const quoteArray = quotes[timerType];
     return quoteArray[Math.floor(Math.random() * quoteArray.length)];
   };
   
-  // Current quote state
-  const [currentQuote, setCurrentQuote] = useState(getRandomQuote());
+  // Current quote state - use deterministic initial value
+  const [currentQuote, setCurrentQuote] = useState(() => getInitialQuote(timerType));
   
   // Load progress data from localStorage on mount
   useEffect(() => {
@@ -160,9 +168,18 @@ export default function Home() {
     return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
   };
   
-  // Update quote when timer type changes
+  // Update quote when timer type changes - but only after initial render
   useEffect(() => {
-    setCurrentQuote(getRandomQuote());
+    // Use a flag to skip the first render to avoid hydration issues
+    const hasWindowObject = typeof window !== 'undefined';
+    if (hasWindowObject) {
+      // Only update quote on the client side after hydration
+      const timer = setTimeout(() => {
+        setCurrentQuote(getRandomQuote());
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
   }, [timerType]);
 
   // Timer logic
@@ -223,7 +240,11 @@ export default function Home() {
     setIsActive(false);
     setTimerType(type);
     setTimeLeft(timerDurations[type]);
-    setCurrentQuote(quotes[type][Math.floor(Math.random() * quotes[type].length)]);
+    
+    // Wait for next render cycle to change quote to avoid conflicts
+    setTimeout(() => {
+      setCurrentQuote(quotes[type][Math.floor(Math.random() * quotes[type].length)]);
+    }, 0);
   };
   
   // Background change functions
@@ -233,6 +254,7 @@ export default function Home() {
       const url = URL.createObjectURL(file);
       setBackgroundUrl(url);
       setBackgroundType(file.type.startsWith('image/gif') ? 'gif' : 'image');
+      setShowVisualizer(false);
     }
   };
   
@@ -281,10 +303,23 @@ export default function Home() {
     }
   };
   
+  // Toggle visualizer
+  const toggleVisualizer = () => {
+    setShowVisualizer(!showVisualizer);
+    if (!showVisualizer) {
+      setBackgroundType('visualizer');
+    } else {
+      setBackgroundType('gradient');
+    }
+  };
+  
   return (
     <div className="relative w-full h-screen overflow-hidden" style={getBackgroundStyle()}>
       {/* Semi-transparent overlay for better text readability */}
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+      
+      {/* Music Visualizer */}
+      {showVisualizer && <SimplifiedMusicVisualizer />}
       
       {/* Timer container */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -403,6 +438,13 @@ export default function Home() {
           </button>
           
           <button
+            onClick={toggleVisualizer}
+            className={`px-4 py-2 ${showVisualizer ? 'bg-purple-700 hover:bg-purple-800' : 'bg-gray-800 hover:bg-gray-700'} bg-opacity-70 hover:bg-opacity-90 rounded-lg text-white text-sm transition-all`}
+          >
+            {showVisualizer ? 'Disable Visualizer' : 'Music Visualizer'}
+          </button>
+          
+          <button
             onClick={() => fileInputRef.current.click()}
             className="px-4 py-2 bg-gray-800 bg-opacity-70 hover:bg-opacity-90 rounded-lg text-white text-sm transition-all"
           >
@@ -417,11 +459,12 @@ export default function Home() {
             onChange={handleBackgroundChange}
           />
           
-          {backgroundType !== 'gradient' && (
+          {(backgroundType !== 'gradient' && backgroundType !== 'visualizer') && (
             <button
               onClick={() => {
                 setBackgroundType('gradient');
                 setBackgroundUrl('');
+                setShowVisualizer(false);
               }}
               className="px-4 py-2 bg-gray-800 bg-opacity-70 hover:bg-opacity-90 rounded-lg text-white text-sm transition-all"
             >

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
-import { Calendar, Plus, BarChart, LineChart, Sword, Trophy, FileText, Timer, GitBranch, ChevronUp, Menu } from "lucide-react";
+import { Calendar, Plus, BarChart, LineChart, Sword, Trophy, FileText, Timer, GitBranch, ChevronUp, Menu, Smile } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -29,7 +29,9 @@ export default function Navbar() {
   }, [pathname]);
 
   const isActive = (path) => {
-    return pathname === path ? "text-blue-400" : "text-gray-400 hover:text-gray-200";
+    return pathname === path || (path !== '/' && pathname?.startsWith(path)) 
+      ? "text-blue-400" 
+      : "text-gray-400 hover:text-gray-200";
   };
 
   const toggleDropup = () => {
@@ -75,6 +77,14 @@ export default function Navbar() {
                   <GitBranch className="h-5 w-5" />
                   <span>Strategic Flow</span>
                 </Link>
+                
+                <Link 
+                  href="/mood-tracker" 
+                  className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-gray-700 rounded-md"
+                >
+                  <Smile className="h-5 w-5" />
+                  <span>Mood Tracker</span>
+                </Link>
               </div>
             </div>
           )}
@@ -95,9 +105,9 @@ export default function Navbar() {
           <span className="text-xs">Progress</span>
         </Link>
         
-        <Link href="/rpg-progress" className={`flex flex-col items-center gap-1 ${isActive('/rpg-progress')}`}>
-          <Sword className="h-6 w-6" />
-          <span className="text-xs">RPG</span>
+        <Link href="/mood-tracker" className={`flex flex-col items-center gap-1 ${isActive('/mood-tracker')}`}>
+          <Smile className="h-6 w-6" />
+          <span className="text-xs">Mood</span>
         </Link>
 
         <Link href="/analytics" className={`flex flex-col items-center gap-1 ${isActive('/analytics')}`}>
