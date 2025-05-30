@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
-import { Calendar, Plus, BarChart, LineChart, Sword, Trophy, FileText, Timer, GitBranch, ChevronUp, Menu, Smile } from "lucide-react";
+import { Calendar, Plus, BarChart, LineChart, Sword, Trophy, FileText, Timer, GitBranch, ChevronUp, Menu, Smile ,Clock } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -84,6 +84,13 @@ export default function Navbar() {
                 >
                   <Smile className="h-5 w-5" />
                   <span>Mood Tracker</span>
+                </Link>
+                 <Link 
+                  href="/time-log" 
+                  className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-gray-700 rounded-md"
+                >
+                  <Clock className="h-5 w-5" />
+                  <span>Time Log</span>
                 </Link>
               </div>
             </div>
