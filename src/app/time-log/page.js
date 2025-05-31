@@ -1046,7 +1046,7 @@ export default function TasksPage() {
             
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Duration <span className="text-gray-500">(e.g., "25m", "1h 30m", "45 minutes")</span>
+                Duration <span className="text-gray-500">(e.g., 25m, 1h 30m, 45 minutes)</span>
               </label>
               <input
                 type="text"
