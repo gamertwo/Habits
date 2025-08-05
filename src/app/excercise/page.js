@@ -685,12 +685,12 @@ export default function ExerciseTracker() {
                   
                   {percentage === 100 && (
                     <div className="text-green-600 font-semibold text-lg">
-                      🏆 Perfect month! You're unstoppable!
+                      🏆 Perfect month! You are unstoppable!
                     </div>
                   )}
                   {percentage >= 75 && percentage < 100 && (
                     <div className="text-blue-600 font-semibold">
-                      🌟 Outstanding! You're almost there!
+                      🌟 Outstanding! You are almost there!
                     </div>
                   )}
                   {percentage >= 50 && percentage < 75 && (
@@ -700,7 +700,7 @@ export default function ExerciseTracker() {
                   )}
                   {percentage < 50 && percentage > 0 && (
                     <div className="text-orange-600 font-semibold">
-                      🚀 Every step counts! You've got this!
+                      🚀 Every step counts! You happenve got this!
                     </div>
                   )}
                 </div>
