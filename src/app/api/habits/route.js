@@ -21,6 +21,8 @@ export async function POST(request) {
   const db = await connectToDatabase();
   const result = await db.collection('habits').insertOne({
     ...habitData,
+    // NEW: default structure for time tracking
+    timeSpentByDate: habitData.timeSpentByDate || {},
     userId: userId,
     createdAt: new Date(),
   });
@@ -35,11 +37,11 @@ export async function PUT(request) {
   const { id, ...updateData } = await request.json();
   const { cookies } = request;
   const userId = cookies.get('userId')?.value;
-  
+
   const db = await connectToDatabase();
   const result = await db.collection('habits').updateOne(
     { _id: new ObjectId(id), userId: userId },
-    { $set: updateData }
+    { $set: updateData } // can include completedDates and/or timeSpentByDate
   );
 
   return Response.json({
@@ -65,4 +67,3 @@ export async function DELETE(request) {
     deletedCount: result.deletedCount
   });
 }
-
