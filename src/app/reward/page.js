@@ -21,7 +21,7 @@ export default function Page() {
   const [spentXP, setSpentXP] = useState(0);
   const [bank, setBank] = useState({ instagram: 0, anime: 0 });
   // 1 XP per minute → 10m costs 10 XP
-  const [rates, setRates] = useState({ instagram: 1, anime: 1 });
+  const [rates, setRates] = useState({ instagram: 2, anime: 1 });
   const [hydrated, setHydrated] = useState(false);
 
   // toasts
@@ -52,7 +52,7 @@ export default function Page() {
         if (parsed.tasks) setTasks(parsed.tasks);
         if (typeof parsed.spentXP === "number") setSpentXP(parsed.spentXP);
         if (parsed.bank) setBank(parsed.bank);
-        if (parsed.rates) setRates(parsed.rates);
+        if (parsed.rates) setRates({ ...parsed.rates, instagram: 2 });
       }
     } catch (_) {}
     setHydrated(true);
@@ -132,7 +132,7 @@ export default function Page() {
     setTasks([]);
     setSpentXP(0);
     setBank({ instagram: 0, anime: 0 });
-    setRates({ instagram: 1, anime: 1 }); // keep 1:1 defaults
+    setRates({ instagram: 2, anime: 1 }); // Instagram costs 2 XP/min
     toast("All data cleared.");
   };
 
