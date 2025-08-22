@@ -9,19 +9,22 @@ import { useEffect, useMemo, useState } from "react";
  *   tasks: Task[],
  *   spentXP: number,
  *   bank: { instagram: number, anime: number },
- *   rates: { instagram: number, anime: number }
+ *   rates: { instagram: number, anime: number },
+ *   debt: { instagram: number, anime: number, other: number } // XP per bucket
  * }
  */
 
 export default function Page() {
-  const STORAGE_KEY = "xp_tasks_v3";
+  const STORAGE_KEY = "xp_tasks_v4"; // bump key to avoid mixing old caches
 
   // ---------- core state ----------
   const [tasks, setTasks] = useState([]);
   const [spentXP, setSpentXP] = useState(0);
   const [bank, setBank] = useState({ instagram: 0, anime: 0 });
-  // 1 XP per minute → 10m costs 10 XP
+  // 1 XP per minute → 10m costs 10 XP (customizable per bucket)
   const [rates, setRates] = useState({ instagram: 2, anime: 1 });
+  // Debt is stored in XP (not minutes), so rate changes don't retroactively change old debt
+  const [debt, setDebt] = useState({ instagram: 0, anime: 0, other: 0 });
   const [hydrated, setHydrated] = useState(false);
 
   // toasts
@@ -39,20 +42,27 @@ export default function Page() {
     () => tasks.reduce((sum, t) => sum + (t.completed ? t.xp : 0), 0),
     [tasks]
   );
-  const xp = Math.max(0, earnedXP - spentXP);
-  const overspent = earnedXP - spentXP < 0;
+  const totalDebt = debt.instagram + debt.anime + debt.other;
+  // Net XP available for redemption
+  const xp = Math.max(0, earnedXP - spentXP - totalDebt);
+  const overspent = earnedXP - spentXP - totalDebt < 0;
 
   // ---------- localStorage ----------
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      // try new key first
+      const rawNew = localStorage.getItem(STORAGE_KEY);
+      const rawOld = localStorage.getItem("xp_tasks_v3"); // migrate forward if present
+      const raw = rawNew ?? rawOld;
+
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.tasks) setTasks(parsed.tasks);
         if (typeof parsed.spentXP === "number") setSpentXP(parsed.spentXP);
         if (parsed.bank) setBank(parsed.bank);
-        if (parsed.rates) setRates({ ...parsed.rates, instagram: 2 });
+        if (parsed.rates) setRates({ ...parsed.rates, instagram: 2 }); // keep your rule
+        if (parsed.debt) setDebt({ instagram: parsed.debt.instagram ?? 0, anime: parsed.debt.anime ?? 0, other: parsed.debt.other ?? 0 });
       }
     } catch (_) {}
     setHydrated(true);
@@ -60,9 +70,9 @@ export default function Page() {
 
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
-    const data = { tasks, spentXP, bank, rates };
+    const data = { tasks, spentXP, bank, rates, debt };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [tasks, spentXP, bank, rates, hydrated]);
+  }, [tasks, spentXP, bank, rates, debt, hydrated]);
 
   // ---------- helpers ----------
   const addTask = (title, xpValue) => {
@@ -92,6 +102,7 @@ export default function Page() {
 
   const spendXPFor = (kind, minutes) => {
     const cost = minutes * rates[kind];
+    // xp already accounts for debt, so blocking here is enough
     if (xp < cost) {
       toast(`Not enough XP. Need ${cost - xp} more.`, "warn");
       return;
@@ -114,7 +125,6 @@ export default function Page() {
     });
   };
 
-  // FIX: don't name this function starting with "use"
   const consumeMinutes = (kind, minutes) => {
     setBank((b) => {
       const m = Math.min(minutes, b[kind]);
@@ -127,18 +137,47 @@ export default function Page() {
     });
   };
 
+  // ---- Debt helpers (all values in XP) ----
+  const addDebtMinutes = (kind, minutes) => {
+    const mins = Math.max(1, Math.floor(minutes || 0));
+    const rate =
+      kind === "instagram" ? rates.instagram :
+      kind === "anime" ? rates.anime : 1; // "other" uses 1 XP/min baseline
+    const xpDebt = mins * rate;
+    setDebt((d) => ({ ...d, [kind]: d[kind] + xpDebt }));
+    toast(`Added ${xpDebt} XP debt (${mins}m ${cap(kind)}).`, "warn");
+  };
+
+  const nudgeDebt = (kind, deltaXP) => {
+    setDebt((d) => {
+      const next = Math.max(0, d[kind] + deltaXP);
+      return { ...d, [kind]: next };
+    });
+  };
+
+  const clearAllDebt = () => {
+    if (!confirm("Clear all recorded debt?")) return;
+    setDebt({ instagram: 0, anime: 0, other: 0 });
+    toast("All debt cleared.");
+  };
+
   const clearAll = () => {
     if (!confirm("Reset everything? This cannot be undone.")) return;
     setTasks([]);
     setSpentXP(0);
     setBank({ instagram: 0, anime: 0 });
     setRates({ instagram: 2, anime: 1 }); // Instagram costs 2 XP/min
+    setDebt({ instagram: 0, anime: 0, other: 0 });
     toast("All data cleared.");
   };
 
   // ---------- form local state ----------
   const [newTitle, setNewTitle] = useState("");
   const [newXP, setNewXP] = useState(10);
+
+  // Debt form local state
+  const [debtKind, setDebtKind] = useState("instagram");
+  const [debtMinutes, setDebtMinutes] = useState(60);
 
   return (
     <main className="wrap">
@@ -160,7 +199,7 @@ export default function Page() {
             <div className="stat-label">XP Balance</div>
             <div className="stat-value">{xp}</div>
             <div className="stat-note">
-              Complete tasks below to earn XP, then redeem for screen time.
+              Complete tasks to pay off debt and earn redeemable XP.
             </div>
           </div>
           <div className="stat">
@@ -168,8 +207,9 @@ export default function Page() {
             <div className="stat-value">{earnedXP}</div>
           </div>
           <div className="stat">
-            <div className="stat-label">XP Spent</div>
-            <div className="stat-value">{spentXP}</div>
+            <div className="stat-label">Debt (XP)</div>
+            <div className="stat-value">{totalDebt}</div>
+            <div className="stat-note">IG: {debt.instagram} · Anime: {debt.anime} · Other: {debt.other}</div>
           </div>
         </section>
       </header>
@@ -263,6 +303,109 @@ export default function Page() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* Debt Manager */}
+      <section className="card debt">
+        <div className="debt-head">
+          <h2>Debt Manager</h2>
+          <div className="debt-total">
+            <span className="bankLabel">Total Debt</span>
+            <span className="bankValue">{totalDebt} XP</span>
+          </div>
+        </div>
+
+        <div className="debtBreak">
+          <span className="chip">Instagram: {debt.instagram} XP</span>
+          <span className="chip">Anime: {debt.anime} XP</span>
+          <span className="chip">Other: {debt.other} XP</span>
+        </div>
+
+        <div className="row">
+          <label className="selectWrap">
+            <span>Kind</span>
+            <select
+              value={debtKind}
+              onChange={(e) => setDebtKind(e.target.value)}
+            >
+              <option value="instagram">Instagram</option>
+              <option value="anime">Anime</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+
+          <label className="minsWrap">
+            <span>Minutes overused</span>
+            <input
+              type="number"
+              min={1}
+              value={debtMinutes}
+              onChange={(e) => setDebtMinutes(Math.max(1, Number(e.target.value || 1)))}
+            />
+          </label>
+
+          <button
+            type="button"
+            className="primary"
+            onClick={() => addDebtMinutes(debtKind, debtMinutes)}
+          >
+            Add Debt
+          </button>
+        </div>
+
+        <div className="buttons">
+          <button
+            type="button"
+            className="pill"
+            onClick={() => addDebtMinutes("instagram", 30)}
+            title={`Costs ${30 * rates.instagram} XP`}
+          >
+            +30m Instagram
+          </button>
+          <button
+            type="button"
+            className="pill"
+            onClick={() => addDebtMinutes("instagram", 60)}
+            title={`Costs ${60 * rates.instagram} XP`}
+          >
+            +1h Instagram
+          </button>
+          <button
+            type="button"
+            className="pill"
+            onClick={() => addDebtMinutes("instagram", 120)}
+            title={`Costs ${120 * rates.instagram} XP`}
+          >
+            +2h Instagram
+          </button>
+
+          <button
+            type="button"
+            className="pill"
+            onClick={() => addDebtMinutes("anime", 30)}
+            title={`Costs ${30 * rates.anime} XP`}
+          >
+            +30m Anime
+          </button>
+          <button
+            type="button"
+            className="pill"
+            onClick={() => addDebtMinutes("anime", 60)}
+            title={`Costs ${60 * rates.anime} XP`}
+          >
+            +1h Anime
+          </button>
+        </div>
+
+        <div className="nudgeRow">
+          <span className="hint">Need to correct a number?</span>
+          <div className="buttons">
+            <button className="pill ghost" onClick={() => nudgeDebt("instagram", -10)}>IG −10 XP</button>
+            <button className="pill ghost" onClick={() => nudgeDebt("anime", -10)}>Anime −10 XP</button>
+            <button className="pill ghost" onClick={() => nudgeDebt("other", -10)}>Other −10 XP</button>
+            <button className="pill danger" onClick={clearAllDebt}>Clear All Debt</button>
+          </div>
+        </div>
       </section>
 
       <section className="redeem">
@@ -449,6 +592,35 @@ export default function Page() {
 
         .redeem { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; position: relative; z-index: 1; }
         @media (max-width: 900px) { .redeem { grid-template-columns: 1fr; } }
+
+        /* Debt styles */
+        .debt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .debt-total { display: flex; align-items: baseline; gap: 8px; background: #0f1326; padding: 10px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+        .bankLabel { color: #9aa3b2; font-size: 12px; }
+        .bankValue { font-size: 18px; font-weight: 800; }
+        .debtBreak { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+        .chip { background: #212642; color: var(--muted); border-radius: 999px; padding: 6px 10px; font-size: 12px; }
+
+        .selectWrap, .minsWrap {
+          display: flex; flex-direction: column; gap: 6px; color: var(--muted);
+        }
+        .selectWrap select, .minsWrap input {
+          min-width: 160px;
+          border: none; outline: none; background: #0f1324; color: var(--text);
+          padding: 12px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--ring);
+        }
+
+        .buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+        .pill {
+          border: none; cursor: pointer; padding: 14px 18px; border-radius: 999px;
+          background: #21264a; color: white; font-weight: 800; font-size: 14px;
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
+        }
+        .pill.ghost { background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); }
+        .pill.danger { background: #3a1720; border: 1px solid rgba(255, 107, 107, 0.4); color: #ffb7b7; }
+
+        .nudgeRow { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .hint { color: var(--muted); font-size: 13px; }
 
         .toasts { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 50; }
         .toast { background: #141a2f; border-radius: 999px; padding: 10px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px var(--ring); font-weight: 700; }
