@@ -2,772 +2,500 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-/**
- * Task: { id: string, title: string, completed: boolean, xp: number }
- * Persisted shape:
- * {
- *   tasks: Task[],
- *   spentXP: number,
- *   bank: { instagram: number, anime: number },
- *   rates: { instagram: number, anime: number },
- *   debt: { instagram: number, anime: number, other: number } // XP per bucket
- * }
- */
+export default function XPTaskForge() {
+  const STORAGE_KEY = "xp_tasks_v6";
+  const INSTAGRAM_RATE = 2; // 2 XP per minute
 
-export default function Page() {
-  const STORAGE_KEY = "xp_tasks_v4"; // bump key to avoid mixing old caches
-
-  // ---------- core state ----------
+  // ---------- Core State ----------
   const [tasks, setTasks] = useState([]);
   const [spentXP, setSpentXP] = useState(0);
-  const [bank, setBank] = useState({ instagram: 0, anime: 0 });
-  // 1 XP per minute → 10m costs 10 XP (customizable per bucket)
-  const [rates, setRates] = useState({ instagram: 2, anime: 1 });
-  // Debt is stored in XP (not minutes), so rate changes don't retroactively change old debt
-  const [debt, setDebt] = useState({ instagram: 0, anime: 0, other: 0 });
+  const [bankedMinutes, setBankedMinutes] = useState(0);
+  const [debt, setDebt] = useState(0); // XP debt that gets paid off automatically
   const [hydrated, setHydrated] = useState(false);
 
-  // toasts
+  // ---------- Toast System ----------
   const [toasts, setToasts] = useState([]);
-  const toast = (msg, tone = "ok") => {
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    setToasts((t) => [...t, { id, msg, tone }]);
+  const addToast = (msg, tone = "ok") => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, tone }]);
     setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id));
-    }, 2600);
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
   };
 
-  // ---------- derived ----------
-  const earnedXP = useMemo(
-    () => tasks.reduce((sum, t) => sum + (t.completed ? t.xp : 0), 0),
+  // ---------- Derived Values ----------
+  const totalEarned = useMemo(() => 
+    tasks.reduce((sum, t) => sum + (t.completed ? t.xp : 0), 0),
     [tasks]
   );
-  const totalDebt = debt.instagram + debt.anime + debt.other;
-  // Net XP available for redemption
-  const xp = Math.max(0, earnedXP - spentXP - totalDebt);
-  const overspent = earnedXP - spentXP - totalDebt < 0;
 
-  // ---------- localStorage ----------
+  // XP automatically pays off debt first, remainder is available
+  const availableXP = Math.max(0, totalEarned - debt - spentXP);
+  const effectiveDebt = Math.max(0, debt - (totalEarned - spentXP));
+
+  // ---------- Local Storage ----------
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      // try new key first
-      const rawNew = localStorage.getItem(STORAGE_KEY);
-      const rawOld = localStorage.getItem("xp_tasks_v3"); // migrate forward if present
-      const raw = rawNew ?? rawOld;
-
+      const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.tasks) setTasks(parsed.tasks);
-        if (typeof parsed.spentXP === "number") setSpentXP(parsed.spentXP);
-        if (parsed.bank) setBank(parsed.bank);
-        if (parsed.rates) setRates({ ...parsed.rates, instagram: 2 }); // keep your rule
-        if (parsed.debt) setDebt({ instagram: parsed.debt.instagram ?? 0, anime: parsed.debt.anime ?? 0, other: parsed.debt.other ?? 0 });
+        const data = JSON.parse(raw);
+        if (data.tasks) setTasks(data.tasks);
+        if (typeof data.spentXP === "number") setSpentXP(data.spentXP);
+        if (typeof data.bankedMinutes === "number") setBankedMinutes(data.bankedMinutes);
+        if (typeof data.debt === "number") setDebt(data.debt);
       }
     } catch (_) {}
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
-    const data = { tasks, spentXP, bank, rates, debt };
+    if (!hydrated) return;
+    const data = { tasks, spentXP, bankedMinutes, debt };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [tasks, spentXP, bank, rates, debt, hydrated]);
+  }, [tasks, spentXP, bankedMinutes, debt, hydrated]);
 
-  // ---------- helpers ----------
+  // ---------- Task Functions ----------
   const addTask = (title, xpValue) => {
-    const t = title.trim();
-    if (!t) return;
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    setTasks((prev) => [{ id, title: t, completed: false, xp: xpValue }, ...prev]);
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
+    
+    const newTask = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      title: cleanTitle,
+      completed: false,
+      xp: xpValue
+    };
+    
+    setTasks(prev => [newTask, ...prev]);
+    addToast("Task added! 🎯");
   };
 
-  const toggleTask = (id) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
+  const toggleTask = (taskId) => {
+    setTasks(prev => prev.map(task => {
+      if (task.id === taskId) {
+        const wasCompleted = task.completed;
+        addToast(wasCompleted ? "Marked as todo" : "Task completed! +XP ✨");
+        return { ...task, completed: !task.completed };
+      }
+      return task;
+    }));
   };
 
-  const deleteTask = (id) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+  const deleteTask = (taskId) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    addToast("Task deleted", "warn");
   };
 
-  const updateTaskXP = (id, delta) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, xp: Math.max(1, Math.min(999, t.xp + delta)) } : t
-      )
-    );
+  const updateTaskXP = (taskId, delta) => {
+    setTasks(prev => prev.map(task => {
+      if (task.id === taskId) {
+        return { ...task, xp: Math.max(1, Math.min(999, task.xp + delta)) };
+      }
+      return task;
+    }));
   };
 
-  const spendXPFor = (kind, minutes) => {
-    const cost = minutes * rates[kind];
-    // xp already accounts for debt, so blocking here is enough
-    if (xp < cost) {
-      toast(`Not enough XP. Need ${cost - xp} more.`, "warn");
+  // ---------- Instagram Functions ----------
+  const redeemInstagram = (minutes) => {
+    const cost = minutes * INSTAGRAM_RATE;
+    if (availableXP < cost) {
+      addToast(`Need ${cost - availableXP} more XP for ${minutes}m Instagram`, "warn");
       return;
     }
-    setSpentXP((s) => s + cost);
-    setBank((b) => ({ ...b, [kind]: b[kind] + minutes }));
-    toast(`Redeemed ${minutes}m ${cap(kind)} for ${cost} XP 🎉`, "ok");
+    
+    setSpentXP(prev => prev + cost);
+    setBankedMinutes(prev => prev + minutes);
+    addToast(`Redeemed ${minutes}m Instagram for ${cost} XP! 🎉`);
   };
 
-  const refundMinutes = (kind, minutes) => {
-    setBank((b) => {
-      const m = Math.min(minutes, b[kind]);
-      if (m <= 0) {
-        toast(`You don't have ${minutes}m banked to refund.`, "warn");
-        return b;
-      }
-      setSpentXP((s) => Math.max(0, s - m * rates[kind]));
-      toast(`Refunded ${m}m ${cap(kind)} back to XP.`, "ok");
-      return { ...b, [kind]: b[kind] - m };
-    });
+  const spendInstagramTime = (minutes) => {
+    if (bankedMinutes < minutes) {
+      addToast(`Only have ${bankedMinutes}m banked`, "warn");
+      return;
+    }
+    
+    setBankedMinutes(prev => prev - minutes);
+    addToast(`Used ${minutes}m Instagram. Enjoy! 📱`);
   };
 
-  const consumeMinutes = (kind, minutes) => {
-    setBank((b) => {
-      const m = Math.min(minutes, b[kind]);
-      if (m <= 0) {
-        toast(`No ${cap(kind)} minutes to use.`, "warn");
-        return b;
-      }
-      toast(`Used ${m}m ${cap(kind)}. Enjoy!`, "ok");
-      return { ...b, [kind]: b[kind] - m };
-    });
+  const addOveruse = (minutes) => {
+    const xpCost = minutes * INSTAGRAM_RATE;
+    setDebt(prev => prev + xpCost);
+    addToast(`Added ${xpCost} XP debt (${minutes}m overuse)`, "warn");
   };
 
-  // ---- Debt helpers (all values in XP) ----
-  const addDebtMinutes = (kind, minutes) => {
-    const mins = Math.max(1, Math.floor(minutes || 0));
-    const rate =
-      kind === "instagram" ? rates.instagram :
-      kind === "anime" ? rates.anime : 1; // "other" uses 1 XP/min baseline
-    const xpDebt = mins * rate;
-    setDebt((d) => ({ ...d, [kind]: d[kind] + xpDebt }));
-    toast(`Added ${xpDebt} XP debt (${mins}m ${cap(kind)}).`, "warn");
-  };
-
-  const nudgeDebt = (kind, deltaXP) => {
-    setDebt((d) => {
-      const next = Math.max(0, d[kind] + deltaXP);
-      return { ...d, [kind]: next };
-    });
-  };
-
-  const clearAllDebt = () => {
-    if (!confirm("Clear all recorded debt?")) return;
-    setDebt({ instagram: 0, anime: 0, other: 0 });
-    toast("All debt cleared.");
-  };
-
-  const clearAll = () => {
+  const resetEverything = () => {
     if (!confirm("Reset everything? This cannot be undone.")) return;
     setTasks([]);
     setSpentXP(0);
-    setBank({ instagram: 0, anime: 0 });
-    setRates({ instagram: 2, anime: 1 }); // Instagram costs 2 XP/min
-    setDebt({ instagram: 0, anime: 0, other: 0 });
-    toast("All data cleared.");
+    setBankedMinutes(0);
+    setDebt(0);
+    addToast("Everything reset");
   };
 
-  // ---------- form local state ----------
+  // ---------- Form State ----------
   const [newTitle, setNewTitle] = useState("");
   const [newXP, setNewXP] = useState(10);
-
-  // Debt form local state
-  const [debtKind, setDebtKind] = useState("instagram");
-  const [debtMinutes, setDebtMinutes] = useState(60);
+  const [overuseMinutes, setOveruseMinutes] = useState(30);
+  const [customRedeemMinutes, setCustomRedeemMinutes] = useState(45);
 
   return (
-    <main className="wrap">
-      {/* animated blobs */}
-      <div className="bgDecor">
-        <div className="blob a" />
-        <div className="blob b" />
-        <div className="blob c" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 relative overflow-hidden">
+      {/* Background Decoration */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute -top-48 -left-24 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-36 -right-24 w-80 h-80 bg-pink-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 right-1/4 w-72 h-72 bg-emerald-500/20 rounded-full blur-3xl animate-pulse delay-2000"></div>
       </div>
 
-      <header className="hero">
-        <div className="title">
-          <span className="emoji">✅</span>
-          <h1>XP Task Forge</h1>
-        </div>
+      <div className="relative z-10 p-4 md:p-8 space-y-6 max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Title Card */}
+          <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-6 flex items-center gap-4">
+            <div className="text-4xl">✅</div>
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              XP Task Forge
+            </h1>
+          </div>
 
-        <section className="stats">
-          <div className={`stat ${overspent ? "warn" : ""}`}>
-            <div className="stat-label">XP Balance</div>
-            <div className="stat-value">{xp}</div>
-            <div className="stat-note">
-              Complete tasks to pay off debt and earn redeemable XP.
+          {/* Stats Grid */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-4 text-center">
+              <div className="text-xs text-slate-400 mb-1">Available XP</div>
+              <div className="text-2xl font-bold text-green-400">{availableXP}</div>
+              <div className="text-xs text-slate-500">Ready to spend</div>
+            </div>
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-4 text-center">
+              <div className="text-xs text-slate-400 mb-1">Total Earned</div>
+              <div className="text-2xl font-bold text-blue-400">{totalEarned}</div>
+              <div className="text-xs text-slate-500">From tasks</div>
+            </div>
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-4 text-center">
+              <div className="text-xs text-slate-400 mb-1">Debt</div>
+              <div className="text-2xl font-bold text-red-400">{effectiveDebt}</div>
+              <div className="text-xs text-slate-500">Auto-paid</div>
             </div>
           </div>
-          <div className="stat">
-            <div className="stat-label">XP Earned</div>
-            <div className="stat-value">{earnedXP}</div>
-          </div>
-          <div className="stat">
-            <div className="stat-label">Debt (XP)</div>
-            <div className="stat-value">{totalDebt}</div>
-            <div className="stat-note">IG: {debt.instagram} · Anime: {debt.anime} · Other: {debt.other}</div>
-          </div>
-        </section>
-      </header>
-
-      <section className="card addTask">
-        <h2>Make a Task</h2>
-        <div className="row">
-          <input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="e.g., Read 10 pages"
-          />
-          <div className="xpPicker">
-            <button type="button" onClick={() => setNewXP((v) => Math.max(1, v - 5))}>
-              –
-            </button>
-            <div className="xpBubble">{newXP} XP</div>
-            <button type="button" onClick={() => setNewXP((v) => Math.min(999, v + 5))}>
-              +
-            </button>
-          </div>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => {
-              addTask(newTitle, newXP);
-              setNewTitle("");
-              toast("Task added.");
-            }}
-          >
-            Add
-          </button>
-        </div>
-      </section>
-
-      <section className="card tasks">
-        <div className="tasks-head">
-          <h2>Your Tasks</h2>
-          <button type="button" className="ghost danger" onClick={clearAll}>
-            Reset All
-          </button>
         </div>
 
-        {tasks.length === 0 && (
-          <div className="empty">no tasks yet—add one above and start earning!</div>
-        )}
-
-        <ul className="taskList">
-          {tasks.map((t) => (
-            <li key={t.id} className={`task ${t.completed ? "done" : ""}`}>
-              <button
-                type="button"
-                aria-label="toggle"
-                className={`checkbox ${t.completed ? "checked" : ""}`}
-                onClick={() => {
-                  toggleTask(t.id);
-                  toast(t.completed ? "Marked as todo." : "Completed! +XP");
+        {/* Add Task Section */}
+        <div className="bg-slate-900/30 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-6">
+          <h2 className="text-xl font-bold mb-4">Add New Task</h2>
+          <div className="flex flex-col gap-3">
+            <div className="w-full">
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g., Read 10 pages, Exercise for 30 minutes..."
+                className="w-full bg-slate-800/50 border border-slate-600/50 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    addTask(newTitle, newXP);
+                    setNewTitle("");
+                  }
                 }}
-              >
-                {t.completed ? "✔" : ""}
-              </button>
-
-              <div className="taskMain">
-                <div className="taskTitle">{t.title}</div>
-                <div className="taskMeta">
-                  <span className="chip">{t.completed ? "Completed" : "Todo"}</span>
-                </div>
-              </div>
-
-              <div className="taskXP">
-                <button type="button" onClick={() => updateTaskXP(t.id, -5)}>
+              />
+            </div>
+            
+            <div className="flex gap-3 items-center">
+              <div className="flex items-center bg-slate-800/50 border border-slate-600/50 rounded-xl p-1">
+                <button 
+                  onClick={() => setNewXP(v => Math.max(1, v - 5))}
+                  className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                >
                   –
                 </button>
-                <div className="xpBubble small">{t.xp} XP</div>
-                <button type="button" onClick={() => updateTaskXP(t.id, +5)}>
+                <div className="px-3 py-2 font-bold text-sm">{newXP} XP</div>
+                <button 
+                  onClick={() => setNewXP(v => Math.min(999, v + 5))}
+                  className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                >
                   +
                 </button>
               </div>
 
               <button
-                type="button"
-                className="ghost danger"
                 onClick={() => {
-                  deleteTask(t.id);
-                  toast("Task deleted.", "warn");
+                  addTask(newTitle, newXP);
+                  setNewTitle("");
                 }}
+                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                🗑
+                Add Task
               </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Debt Manager */}
-      <section className="card debt">
-        <div className="debt-head">
-          <h2>Debt Manager</h2>
-          <div className="debt-total">
-            <span className="bankLabel">Total Debt</span>
-            <span className="bankValue">{totalDebt} XP</span>
+            </div>
           </div>
         </div>
 
-        <div className="debtBreak">
-          <span className="chip">Instagram: {debt.instagram} XP</span>
-          <span className="chip">Anime: {debt.anime} XP</span>
-          <span className="chip">Other: {debt.other} XP</span>
-        </div>
-
-        <div className="row">
-          <label className="selectWrap">
-            <span>Kind</span>
-            <select
-              value={debtKind}
-              onChange={(e) => setDebtKind(e.target.value)}
+        {/* Tasks List */}
+        <div className="bg-slate-900/30 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Your Tasks</h2>
+            <button 
+              onClick={resetEverything}
+              className="text-red-400 hover:text-red-300 border border-red-400/30 hover:border-red-300/50 px-3 py-1 rounded-lg text-sm transition-colors"
             >
-              <option value="instagram">Instagram</option>
-              <option value="anime">Anime</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
+              Reset All
+            </button>
+          </div>
 
-          <label className="minsWrap">
-            <span>Minutes overused</span>
-            <input
-              type="number"
-              min={1}
-              value={debtMinutes}
-              onChange={(e) => setDebtMinutes(Math.max(1, Number(e.target.value || 1)))}
-            />
-          </label>
+          {tasks.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <div className="text-4xl mb-4">🎯</div>
+              <p>No tasks yet—add one above and start earning XP!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tasks.map(task => (
+                <div 
+                  key={task.id} 
+                  className={`
+                    rounded-xl border transition-all duration-200
+                    ${task.completed 
+                      ? 'bg-green-900/20 border-green-500/30' 
+                      : 'bg-slate-800/30 border-slate-600/30 hover:border-slate-500/50'
+                    }
+                  `}
+                >
+                  {/* Mobile Layout - Stacked Design */}
+                  <div className="block md:hidden p-4">
+                    <div className="flex items-start gap-3 mb-4">
+                      <button
+                        onClick={() => toggleTask(task.id)}
+                        className={`
+                          w-12 h-12 rounded-xl border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 text-lg
+                          ${task.completed 
+                            ? 'bg-green-500 border-green-500 text-white' 
+                            : 'border-slate-500 hover:border-slate-400'
+                          }
+                        `}
+                      >
+                        {task.completed && "✔"}
+                      </button>
+                      
+                      <div className="flex-1 min-w-0 pt-1">
+                        <div className={`font-semibold text-lg leading-snug mb-2 ${task.completed ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                          {task.title}
+                        </div>
+                        <div className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
+                          task.completed 
+                            ? 'bg-green-900/30 text-green-300 border border-green-500/30' 
+                            : 'bg-slate-700/50 text-slate-300 border border-slate-600/30'
+                        }`}>
+                          {task.completed ? 'Completed' : 'Todo'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-700/30">
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={() => updateTaskXP(task.id, -5)}
+                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-700 hover:bg-slate-600 transition-colors text-lg font-bold"
+                        >
+                          −
+                        </button>
+                        <div className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl text-base font-bold text-white min-w-[70px] text-center">
+                          {task.xp} XP
+                        </div>
+                        <button 
+                          onClick={() => updateTaskXP(task.id, +5)}
+                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-700 hover:bg-slate-600 transition-colors text-lg font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                      
+                      <button
+                        onClick={() => deleteTask(task.id)}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl text-red-400 hover:bg-red-400/10 border border-red-400/20 hover:border-red-400/40 transition-all text-lg"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </div>
 
-          <button
-            type="button"
-            className="primary"
-            onClick={() => addDebtMinutes(debtKind, debtMinutes)}
-          >
-            Add Debt
-          </button>
+                  {/* Desktop Layout */}
+                  <div className="hidden md:flex items-center gap-4 p-4">
+                    <button
+                      onClick={() => toggleTask(task.id)}
+                      className={`
+                        w-11 h-11 rounded-xl border-2 flex items-center justify-center transition-all duration-200 text-lg
+                        ${task.completed 
+                          ? 'bg-green-500 border-green-500 text-white' 
+                          : 'border-slate-500 hover:border-slate-400'
+                        }
+                      `}
+                    >
+                      {task.completed && "✔"}
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-semibold text-lg ${task.completed ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                        {task.title}
+                      </div>
+                      <div className={`inline-flex px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                        task.completed 
+                          ? 'bg-green-900/30 text-green-300' 
+                          : 'bg-slate-700/50 text-slate-300'
+                      }`}>
+                        {task.completed ? 'Completed' : 'Todo'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => updateTaskXP(task.id, -5)}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-lg"
+                      >
+                        −
+                      </button>
+                      <div className="px-3 py-2 bg-slate-700 rounded-lg text-sm font-bold min-w-[65px] text-center">
+                        {task.xp} XP
+                      </div>
+                      <button 
+                        onClick={() => updateTaskXP(task.id, +5)}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-lg"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => deleteTask(task.id)}
+                      className="w-9 h-9 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-400/10 transition-colors"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="buttons">
-          <button
-            type="button"
-            className="pill"
-            onClick={() => addDebtMinutes("instagram", 30)}
-            title={`Costs ${30 * rates.instagram} XP`}
-          >
-            +30m Instagram
-          </button>
-          <button
-            type="button"
-            className="pill"
-            onClick={() => addDebtMinutes("instagram", 60)}
-            title={`Costs ${60 * rates.instagram} XP`}
-          >
-            +1h Instagram
-          </button>
-          <button
-            type="button"
-            className="pill"
-            onClick={() => addDebtMinutes("instagram", 120)}
-            title={`Costs ${120 * rates.instagram} XP`}
-          >
-            +2h Instagram
-          </button>
+        {/* Instagram Section */}
+        <div className="bg-slate-900/30 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-6">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 bg-pink-500 rounded-full shadow-lg shadow-pink-500/50"></div>
+              <h2 className="text-xl font-bold">Instagram Time</h2>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-600/50 rounded-full px-3 py-1 text-sm">
+              <span className="text-slate-400">Banked:</span>
+              <span className="font-bold ml-1">{bankedMinutes}m</span>
+            </div>
+          </div>
 
-          <button
-            type="button"
-            className="pill"
-            onClick={() => addDebtMinutes("anime", 30)}
-            title={`Costs ${30 * rates.anime} XP`}
-          >
-            +30m Anime
-          </button>
-          <button
-            type="button"
-            className="pill"
-            onClick={() => addDebtMinutes("anime", 60)}
-            title={`Costs ${60 * rates.anime} XP`}
-          >
-            +1h Anime
-          </button>
-        </div>
+          <div className="flex justify-between items-center mb-6 text-sm text-slate-400">
+            <span>Rate: {INSTAGRAM_RATE} XP per minute</span>
+            <span>Available: {availableXP} XP</span>
+          </div>
 
-        <div className="nudgeRow">
-          <span className="hint">Need to correct a number?</span>
-          <div className="buttons">
-            <button className="pill ghost" onClick={() => nudgeDebt("instagram", -10)}>IG −10 XP</button>
-            <button className="pill ghost" onClick={() => nudgeDebt("anime", -10)}>Anime −10 XP</button>
-            <button className="pill ghost" onClick={() => nudgeDebt("other", -10)}>Other −10 XP</button>
-            <button className="pill danger" onClick={clearAllDebt}>Clear All Debt</button>
+          <div className="space-y-6">
+            {/* Redeem Time */}
+            <div>
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Redeem Time</h3>
+              <div className="space-y-3">
+                {/* Quick Options */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { minutes: 15, label: "15m" },
+                    { minutes: 30, label: "30m" },
+                    { minutes: 60, label: "1h" }
+                  ].map(({ minutes, label }) => (
+                    <button
+                      key={minutes}
+                      onClick={() => redeemInstagram(minutes)}
+                      className="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-full text-sm transition-colors"
+                    >
+                      {label} ({minutes * INSTAGRAM_RATE} XP)
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom Option */}
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={customRedeemMinutes}
+                    onChange={(e) => setCustomRedeemMinutes(Math.max(1, Math.min(999, Number(e.target.value || 1))))}
+                    className="w-20 bg-slate-800/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm"
+                    placeholder="Min"
+                  />
+                  <span className="text-slate-400 text-sm">minutes</span>
+                  <button
+                    onClick={() => redeemInstagram(customRedeemMinutes)}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded-full text-sm transition-colors"
+                  >
+                    Redeem ({customRedeemMinutes * INSTAGRAM_RATE} XP)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Use Banked Time */}
+            <div>
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Use Banked Time</h3>
+              <div className="flex flex-wrap gap-2">
+                {[15, 30, 60].map(minutes => (
+                  <button
+                    key={minutes}
+                    onClick={() => spendInstagramTime(minutes)}
+                    className="border border-slate-600 hover:border-slate-500 text-slate-300 hover:text-white font-medium py-2 px-4 rounded-full text-sm transition-colors"
+                  >
+                    Use {minutes}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Record Overuse */}
+            <div>
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Record Overuse</h3>
+              <div className="flex gap-3 items-center">
+                <input
+                  type="number"
+                  min={1}
+                  value={overuseMinutes}
+                  onChange={(e) => setOveruseMinutes(Math.max(1, Number(e.target.value || 1)))}
+                  className="w-24 bg-slate-800/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm"
+                  placeholder="Minutes"
+                />
+                <button 
+                  onClick={() => addOveruse(overuseMinutes)}
+                  className="bg-red-900/30 border border-red-500/30 text-red-300 hover:bg-red-900/50 font-medium py-2 px-4 rounded-full text-sm transition-colors"
+                >
+                  Add {overuseMinutes}m Overuse
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
-
-      <section className="redeem">
-        <RedeemCard
-          label="Instagram"
-          color="var(--insta)"
-          minutes={bank.instagram}
-          rate={rates.instagram}
-          onSetRate={(v) => setRates((r) => ({ ...r, instagram: v }))}
-          onRedeem={(m) => spendXPFor("instagram", m)}
-          onConsume={(m) => consumeMinutes("instagram", m)}
-          onRefund={(m) => refundMinutes("instagram", m)}
-          xpBalance={xp}
-          onToast={toast}
-        />
-        <RedeemCard
-          label="Anime"
-          color="var(--anime)"
-          minutes={bank.anime}
-          rate={rates.anime}
-          onSetRate={(v) => setRates((r) => ({ ...r, anime: v }))}
-          onRedeem={(m) => spendXPFor("anime", m)}
-          onConsume={(m) => consumeMinutes("anime", m)}
-          onRefund={(m) => refundMinutes("anime", m)}
-          xpBalance={xp}
-          onToast={toast}
-        />
-      </section>
-
-      {/* toasts */}
-      <div className="toasts">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.tone}`}>{t.msg}</div>
-        ))}
       </div>
 
-      <style jsx>{`
-        :root {
-          --bg: #0b0e1a;
-          --card: #14182b;
-          --muted: #a3adc3;
-          --text: #eaf0ff;
-          --primary: #7e9cff;
-          --success: #48d597;
-          --danger: #ff6b6b;
-          --insta: #ff8ab5;
-          --anime: #8ef5ff;
-          --ring: rgba(255, 255, 255, 0.12);
-        }
-
-        * { box-sizing: border-box; }
-
-        .wrap {
-          min-height: 100svh;
-          color: var(--text);
-          padding: 28px clamp(16px, 4vw, 48px);
-          display: flex;
-          flex-direction: column;
-          gap: 24px;
-          position: relative;
-          overflow: hidden;
-          font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue",
-            Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-          background:
-            radial-gradient(1200px 600px at 30% -10%, #1b2140 0%, transparent 60%),
-            radial-gradient(1000px 500px at 100% 0%, #151b35 0%, transparent 60%),
-            var(--bg);
-        }
-
-        /* animated soft blobs */
-        .bgDecor { pointer-events: none; position: absolute; inset: 0; }
-        .blob {
-          position: absolute;
-          width: 46vmax; height: 46vmax;
-          filter: blur(60px) saturate(140%);
-          opacity: 0.36;
-          border-radius: 999px;
-          mix-blend-mode: screen;
-          animation: floaty 22s ease-in-out infinite;
-        }
-        .blob.a { background: radial-gradient(circle at 30% 30%, #5b74ff, transparent 60%); top: -20vmax; left: -10vmax; animation-delay: 0s; }
-        .blob.b { background: radial-gradient(circle at 70% 70%, #53f0c4, transparent 60%); bottom: -18vmax; right: -8vmax; animation-delay: 4s; }
-        .blob.c { background: radial-gradient(circle at 60% 20%, #ff7aa8, transparent 60%); top: 10vmax; right: 5vmax; animation-delay: 8s; }
-
-        @keyframes floaty {
-          0%,100% { transform: translateY(0) translateX(0) scale(1); }
-          50% { transform: translateY(-4vmax) translateX(2vmax) scale(1.06); }
-        }
-
-        .hero {
-          display: grid;
-          grid-template-columns: 1.2fr 2fr;
-          gap: 20px;
-          position: relative;
-          z-index: 1;
-        }
-        @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
-
-        .title {
-          background: linear-gradient(160deg, #1a1f37, #14182a);
-          border-radius: 28px;
-          padding: 24px 28px;
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--ring);
-        }
-        .emoji { font-size: 42px; }
-        h1 { font-size: clamp(28px, 3.8vw, 48px); margin: 0; letter-spacing: 0.5px; }
-
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-        }
-        @media (max-width: 900px) { .stats { grid-template-columns: 1fr; } }
-        .stat {
-          border-radius: 24px; padding: 18px 22px; background: var(--card);
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--ring);
-        }
-        .stat.warn { outline: 3px solid var(--danger); }
-        .stat-label { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
-        .stat-value { font-size: 40px; font-weight: 800; }
-        .stat-note { color: var(--muted); font-size: 13px; margin-top: 6px; }
-
-        .card {
-          background: var(--card);
-          border-radius: 28px;
-          padding: 22px;
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--ring);
-          position: relative; z-index: 1;
-        }
-
-        .addTask h2, .tasks h2 { margin: 0 0 14px 0; font-size: 26px; }
-        .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        input[type="text"] {
-          flex: 1; min-width: 220px; border: none; outline: none; background: #0f1324;
-          color: var(--text); padding: 18px 18px; border-radius: 18px; font-size: 18px;
-          box-shadow: inset 0 0 0 1px var(--ring);
-        }
-
-        .xpPicker { display: flex; align-items: center; gap: 8px; background: #0f1324; border-radius: 999px; padding: 6px; box-shadow: inset 0 0 0 1px var(--ring); }
-        .xpPicker > button { width: 44px; height: 44px; border-radius: 999px; background: #171a2a; border: none; color: var(--text); font-size: 26px; cursor: pointer; }
-        .xpBubble { background: #2a2f4a; border-radius: 999px; padding: 10px 16px; font-weight: 700; font-size: 16px; }
-        .xpBubble.small { padding: 8px 12px; font-size: 14px; }
-
-        button.primary {
-          background: linear-gradient(180deg, #7e9cff, #5472ff);
-          color: white; border: none; padding: 16px 24px; border-radius: 18px;
-          font-size: 18px; font-weight: 800; cursor: pointer;
-          box-shadow: 0 10px 20px rgba(84, 114, 255, 0.35);
-        }
-        button.ghost { background: transparent; border: 1px solid var(--ring); color: var(--text); padding: 12px 16px; border-radius: 16px; cursor: pointer; }
-        .danger { color: var(--danger); border-color: rgba(255, 107, 107, 0.35); }
-
-        .tasks-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-        .empty { color: var(--muted); padding: 24px; text-align: center; font-size: 16px; }
-
-        .taskList { display: grid; gap: 12px; list-style: none; padding: 0; margin: 12px 0 0 0; }
-        .task {
-          display: grid; grid-template-columns: auto 1fr auto auto; gap: 14px; align-items: center;
-          padding: 14px; border-radius: 20px; background: #101428; box-shadow: inset 0 0 0 1px var(--ring);
-        }
-        @media (max-width: 680px) {
-          .task { grid-template-columns: auto 1fr; grid-template-rows: auto auto; }
-          .taskXP, .task > .ghost { grid-column: 1 / -1; }
-        }
-        .task.done { background: #0f1f18; box-shadow: inset 0 0 0 2px rgba(72, 213, 151, 0.35); }
-        .checkbox {
-          width: 42px; height: 42px; border-radius: 14px; border: 2px solid #2b3253;
-          background: #111632; color: white; display: grid; place-items: center; font-size: 22px; cursor: pointer;
-        }
-        .checkbox.checked {
-          background: linear-gradient(180deg, #4ce3a6, #2abf7a);
-          border-color: transparent; box-shadow: 0 8px 16px rgba(72, 213, 151, 0.35);
-        }
-
-        .taskMain { display: flex; flex-direction: column; gap: 6px; }
-        .taskTitle { font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }
-        .taskMeta .chip { background: #212642; color: var(--muted); border-radius: 999px; padding: 6px 10px; font-size: 12px; }
-
-        .taskXP { display: flex; align-items: center; gap: 8px; }
-        .taskXP > button { width: 36px; height: 36px; border-radius: 10px; border: none; color: var(--text); background: #1a1f3e; font-size: 22px; cursor: pointer; }
-
-        .redeem { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; position: relative; z-index: 1; }
-        @media (max-width: 900px) { .redeem { grid-template-columns: 1fr; } }
-
-        /* Debt styles */
-        .debt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-        .debt-total { display: flex; align-items: baseline; gap: 8px; background: #0f1326; padding: 10px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
-        .bankLabel { color: #9aa3b2; font-size: 12px; }
-        .bankValue { font-size: 18px; font-weight: 800; }
-        .debtBreak { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-        .chip { background: #212642; color: var(--muted); border-radius: 999px; padding: 6px 10px; font-size: 12px; }
-
-        .selectWrap, .minsWrap {
-          display: flex; flex-direction: column; gap: 6px; color: var(--muted);
-        }
-        .selectWrap select, .minsWrap input {
-          min-width: 160px;
-          border: none; outline: none; background: #0f1324; color: var(--text);
-          padding: 12px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--ring);
-        }
-
-        .buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
-        .pill {
-          border: none; cursor: pointer; padding: 14px 18px; border-radius: 999px;
-          background: #21264a; color: white; font-weight: 800; font-size: 14px;
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
-        }
-        .pill.ghost { background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); }
-        .pill.danger { background: #3a1720; border: 1px solid rgba(255, 107, 107, 0.4); color: #ffb7b7; }
-
-        .nudgeRow { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .hint { color: var(--muted); font-size: 13px; }
-
-        .toasts { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 50; }
-        .toast { background: #141a2f; border-radius: 999px; padding: 10px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px var(--ring); font-weight: 700; }
-        .toast.warn { color: #ffd7d7; border: 1px solid rgba(255,107,107,.4); }
-      `}</style>
-    </main>
-  );
-}
-
-function RedeemCard({
-  label,
-  color,
-  minutes,
-  rate,
-  onSetRate,
-  onRedeem,
-  onConsume,
-  onRefund,
-  xpBalance,
-  onToast,
-}) {
-  const quick = [5, 15, 30];
-  const [custom, setCustom] = useState(10);
-
-  const redeem = (m) => {
-    const cost = m * rate;
-    if (xpBalance < cost) {
-      onToast?.(`Not enough XP for ${m}m ${label}. Need ${cost - xpBalance} more.`, "warn");
-      return;
-    }
-    onRedeem(m);
-  };
-
-  return (
-    <section className="redeemCard">
-      <div className="head">
-        <div className="left">
-          <div className="dot" aria-hidden style={{ background: color }} />
-          <h3>{label} Time</h3>
-        </div>
-        <div className="bank">
-          <span className="bankLabel">Banked</span>
-          <span className="bankValue">{minutes} min</span>
-        </div>
-      </div>
-
-      <div className="rate">
-        <span>Rate:</span>
-        <div className="rateBox">
-          <button type="button" onClick={() => onSetRate(Math.max(1, rate - 1))}>–</button>
-          <div className="val">{rate} XP / min</div>
-          <button type="button" onClick={() => onSetRate(Math.min(999, rate + 1))}>+</button>
-        </div>
-        <div className="xpHint">Balance: {xpBalance} XP</div>
-      </div>
-
-      <div className="buttons">
-        {quick.map((m) => (
-          <button
-            key={m}
-            type="button"
-            className="pill"
-            onClick={() => redeem(m)}
-            title={`Costs ${m * rate} XP`}
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`
+              px-4 py-2 rounded-full font-medium text-sm shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300
+              ${toast.tone === 'warn' 
+                ? 'bg-red-900/80 border border-red-500/50 text-red-100' 
+                : 'bg-slate-800/80 border border-slate-600/50 text-slate-100'
+              }
+            `}
           >
-            Redeem {m}m
-          </button>
+            {toast.msg}
+          </div>
         ))}
       </div>
-
-      <div className="custom">
-        <input
-          type="number"
-          min={1}
-          value={custom}
-          onChange={(e) => setCustom(Math.max(1, Number(e.target.value || 1)))}
-        />
-        <button type="button" className="pill" onClick={() => redeem(custom)}>
-          Redeem {custom}m ({custom * rate} XP)
-        </button>
-      </div>
-
-      <div className="buttons">
-        {quick.map((m) => (
-          <button key={"use" + m} type="button" className="pill ghost" onClick={() => onConsume(m)}>
-            Use {m}m
-          </button>
-        ))}
-      </div>
-
-      <div className="buttons">
-        {quick.map((m) => (
-          <button
-            key={"refund" + m}
-            type="button"
-            className="pill danger"
-            onClick={() => onRefund(m)}
-            title={`Refunds ${m * rate} XP (must have at least ${m}m banked)`}
-          >
-            Refund {m}m
-          </button>
-        ))}
-      </div>
-
-      <style jsx>{`
-        .redeemCard {
-          background: #141a2f;
-          border-radius: 28px;
-          padding: 18px;
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-        .head { display: flex; justify-content: space-between; align-items: center; }
-        .left { display: flex; align-items: center; gap: 10px; }
-        .dot { width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.06); }
-        h3 { margin: 0; font-size: 22px; }
-        .bank { display: flex; align-items: baseline; gap: 8px; background: #0f1326; padding: 10px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
-        .bankLabel { color: #9aa3b2; font-size: 12px; }
-        .bankValue { font-size: 18px; font-weight: 800; }
-
-        .rate { display: flex; align-items: center; gap: 10px; color: #b7bfd0; flex-wrap: wrap; }
-        .rateBox { display: flex; align-items: center; gap: 8px; background: #0f1326; padding: 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
-        .rateBox > button { width: 40px; height: 40px; border-radius: 12px; border: none; color: white; background: #1a1f3e; font-size: 22px; cursor: pointer; }
-        .val { background: #232846; border-radius: 999px; padding: 8px 12px; font-weight: 800; font-size: 14px; }
-        .xpHint { margin-left: auto; font-size: 13px; color: #9aa3b2; }
-
-        .buttons { display: flex; gap: 10px; flex-wrap: wrap; }
-        .pill {
-          border: none; cursor: pointer; padding: 14px 18px; border-radius: 999px;
-          background: #21264a; color: white; font-weight: 800; font-size: 14px;
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
-        }
-        .pill.ghost { background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); }
-        .pill.danger { background: #3a1720; border: 1px solid rgba(255, 107, 107, 0.4); color: #ffb7b7; }
-
-        .custom { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-        .custom input {
-          width: 110px; padding: 12px 14px; border-radius: 14px; border: none;
-          color: white; background: #0f1326; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
-        }
-      `}</style>
-    </section>
+    </div>
   );
-}
-
-function cap(s) {
-  return s[0].toUpperCase() + s.slice(1);
 }
