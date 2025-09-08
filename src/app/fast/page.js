@@ -1226,14 +1226,6 @@ const SpeedTasksPage = () => {
           </div>
         )}
 
-        {/* Keyboard Shortcuts Help */}
-        <div className="fixed top-6 right-6 bg-gray-800/90 backdrop-blur-sm p-4 rounded-xl border border-gray-600 text-sm text-gray-400">
-          <div className="font-bold mb-2">⚡ Quick Commands:</div>
-          <div>Space: Pause/Resume</div>
-          <div>Enter: Complete Mission</div>
-          <div>F: Focus Mode</div>
-        </div>
-
         {/* Celebration Animation */}
         {showCelebration && (
           <div className="fixed top-20 right-6 z-50 animate-bounce">
