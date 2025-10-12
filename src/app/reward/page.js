@@ -20,20 +20,19 @@ export default function XPTaskForge() {
     setToasts(prev => [...prev, { id, msg, tone }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
+    }, 2500);
   };
 
-  // ---------- Derived Values ----------
-  const totalEarned = useMemo(() => 
-    tasks.reduce((sum, t) => sum + (t.completed ? t.xp : 0), 0),
+  // ---------- Derived ----------
+  const totalEarned = useMemo(
+    () => tasks.reduce((sum, t) => sum + (t.completed ? t.xp : 0), 0),
     [tasks]
   );
-
-  // XP automatically pays off debt first, remainder is available
+  // XP auto-pays debt first; remainder is available
   const availableXP = Math.max(0, totalEarned - debt - spentXP);
   const effectiveDebt = Math.max(0, debt - (totalEarned - spentXP));
 
-  // ---------- Local Storage ----------
+  // ---------- Load from localStorage ----------
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -45,28 +44,42 @@ export default function XPTaskForge() {
         if (typeof data.bankedMinutes === "number") setBankedMinutes(data.bankedMinutes);
         if (typeof data.debt === "number") setDebt(data.debt);
       }
-    } catch (_) {}
+    } catch {}
     setHydrated(true);
   }, []);
 
+  // ---------- Save to localStorage ----------
   useEffect(() => {
     if (!hydrated) return;
     const data = { tasks, spentXP, bankedMinutes, debt };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [tasks, spentXP, bankedMinutes, debt, hydrated]);
 
-  // ---------- Task Functions ----------
+  // ---------- NEW: Sync debt -> server KV whenever it changes ----------
+  useEffect(() => {
+    if (!hydrated) return;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetch("/api/debt/save", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ debt }),
+        signal: ctrl.signal
+      }).catch(() => {});
+    }, 350); // tiny debounce so we don't spam
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [debt, hydrated]);
+
+  // ---------- Helpers to mutate ----------
   const addTask = (title, xpValue) => {
     const cleanTitle = title.trim();
     if (!cleanTitle) return;
-    
     const newTask = {
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       title: cleanTitle,
       completed: false,
       xp: xpValue
     };
-    
     setTasks(prev => [newTask, ...prev]);
     addToast("Task added! 🎯");
   };
@@ -96,14 +109,13 @@ export default function XPTaskForge() {
     }));
   };
 
-  // ---------- Instagram Functions ----------
+  // ---------- Instagram ----------
   const redeemInstagram = (minutes) => {
     const cost = minutes * INSTAGRAM_RATE;
     if (availableXP < cost) {
       addToast(`Need ${cost - availableXP} more XP for ${minutes}m Instagram`, "warn");
       return;
     }
-    
     setSpentXP(prev => prev + cost);
     setBankedMinutes(prev => prev + minutes);
     addToast(`Redeemed ${minutes}m Instagram for ${cost} XP! 🎉`);
@@ -114,7 +126,6 @@ export default function XPTaskForge() {
       addToast(`Only have ${bankedMinutes}m banked`, "warn");
       return;
     }
-    
     setBankedMinutes(prev => prev - minutes);
     addToast(`Used ${minutes}m Instagram. Enjoy! 📱`);
   };
@@ -140,6 +151,18 @@ export default function XPTaskForge() {
   const [overuseMinutes, setOveruseMinutes] = useState(30);
   const [customRedeemMinutes, setCustomRedeemMinutes] = useState(45);
 
+  // ---------- NEW: Manual server post (useful for testing) ----------
+  async function postServerNow() {
+    try {
+      const res = await fetch("/api/debt/cron"); // triggers server-side post
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || res.statusText);
+      addToast(`Server posted debt (${j.debt} XP) ✅`);
+    } catch (e) {
+      addToast(`Failed: ${e.message || e}`, "warn");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 relative overflow-hidden">
       {/* Background Decoration */}
@@ -160,7 +183,7 @@ export default function XPTaskForge() {
             </h1>
           </div>
 
-          {/* Stats Grid */}
+          {/* Stats Grid + Action */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-4 text-center">
               <div className="text-xs text-slate-400 mb-1">Available XP</div>
@@ -180,6 +203,16 @@ export default function XPTaskForge() {
           </div>
         </div>
 
+        {/* Quick action (server post) */}
+        <div className="flex justify-end">
+          <button
+            onClick={postServerNow}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-4 rounded-lg border border-emerald-400/40 shadow"
+          >
+            Post Debt (server) Now
+          </button>
+        </div>
+
         {/* Add Task Section */}
         <div className="bg-slate-900/30 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-6">
           <h2 className="text-xl font-bold mb-4">Add New Task</h2>
@@ -191,7 +224,7 @@ export default function XPTaskForge() {
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="e.g., Read 10 pages, Exercise for 30 minutes..."
                 className="w-full bg-slate-800/50 border border-slate-600/50 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                onKeyPress={(e) => {
+                onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     addTask(newTitle, newXP);
                     setNewTitle("");
@@ -199,7 +232,7 @@ export default function XPTaskForge() {
                 }}
               />
             </div>
-            
+
             <div className="flex gap-3 items-center">
               <div className="flex items-center bg-slate-800/50 border border-slate-600/50 rounded-xl p-1">
                 <button 
@@ -260,7 +293,7 @@ export default function XPTaskForge() {
                     }
                   `}
                 >
-                  {/* Mobile Layout - Stacked Design */}
+                  {/* Mobile Layout */}
                   <div className="block md:hidden p-4">
                     <div className="flex items-start gap-3 mb-4">
                       <button
@@ -479,18 +512,16 @@ export default function XPTaskForge() {
         </div>
       </div>
 
-      {/* Toast Notifications */}
+      {/* Toasts */}
       <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2">
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className={`
-              px-4 py-2 rounded-full font-medium text-sm shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300
+            className={`px-4 py-2 rounded-full font-medium text-sm shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300
               ${toast.tone === 'warn' 
                 ? 'bg-red-900/80 border border-red-500/50 text-red-100' 
                 : 'bg-slate-800/80 border border-slate-600/50 text-slate-100'
-              }
-            `}
+              }`}
           >
             {toast.msg}
           </div>
