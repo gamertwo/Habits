@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Clock, Play, Pause, Square, Plus, ChevronDown, ChevronRight, Edit2, Trash2,
-  Download, Upload, Timer, BarChart3, Calendar, Filter, X, User, RefreshCw, Save,
-  Tag, Search, Settings, Bell, AlarmClockCheck, Coffee, Undo, Redo, Info, Printer
+  Download, Upload, Timer, BarChart3, Calendar, Filter, User, RefreshCw, Save,
+  Tag, Search, AlarmClockCheck, Undo, Redo, Info, Printer
 } from "lucide-react";
 
 /* =========================
@@ -12,21 +12,24 @@ import {
 const ANALYTICS_PERIODS = { day: "Today", week: "This Week", month: "This Month", quarter: "This Quarter", year: "This Year", custom: "Custom" };
 const PRIORITY = ["Low", "Medium", "High", "Critical"];
 const STATUS = ["Todo", "In Progress", "Blocked", "Done", "Archived"];
+
 const THEME = {
-  bg: "bg-[#0a132e]",
-  panel: "bg-gray-800/70 border border-white/10 backdrop-blur-sm",
-  subpanel: "bg-gray-800/50 border border-white/10 backdrop-blur",
+  bg: "min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,rgba(56,189,248,0.20),transparent_60%),radial-gradient(900px_500px_at_10%_10%,rgba(168,85,247,0.18),transparent_60%)] bg-slate-950",
+  panel: "bg-white/7.5 border border-white/10 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl",
+  subpanel: "bg-white/5 border border-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur",
   text: "text-slate-100",
   subtext: "text-slate-300/80",
   cyan: "text-cyan-300",
   amber: "text-amber-300",
 };
+
 const DEFAULT_POMO = { work: 25, break: 5, longBreak: 15, cyclesBeforeLong: 4 };
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 
 /* =========================
    UTILS
 ========================= */
+const cn = (...c) => c.filter(Boolean).join(" ");
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const msToHMS = (ms) => {
@@ -54,8 +57,13 @@ const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 
 /* Small helpers for charts */
 const fmtDay = (d) => new Date(d).toISOString().slice(0, 10);
-const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-const endOfDay = (d) => { const x = new Date(d); x.setHours(23,59,59,999); return x; }
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const endOfDay = (d) => { const x = new Date(d); x.setHours(23,59,59,999); return x; };
+
+/* Input/Buttons (accessible, thumb-friendly) */
+const inputBase = "w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-100 placeholder-gray-400 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40";
+const btnPrimary = "flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-white bg-emerald-600 hover:bg-emerald-500 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40";
+const btnSoft    = "px-3 py-2 rounded-lg bg-white/8 hover:bg-white/12 text-gray-100 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40";
 
 /* =========================
    MAIN
@@ -103,7 +111,6 @@ export default function TasksPage() {
   const [sortBy, setSortBy] = useState("created"); // created | name | time | due | priority
 
   /* ---------- Analytics ---------- */
-  // Collapsed by default so it’s not overwhelming:
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsPeriod, setAnalyticsPeriod] = useState("week");
   const [analyticsStartDate, setAnalyticsStartDate] = useState("");
@@ -111,7 +118,6 @@ export default function TasksPage() {
   const [selectedTasksForAnalytics, setSelectedTasksForAnalytics] = useState(new Set());
   const [sessionFilterQuery, setSessionFilterQuery] = useState("");
   const [showAnalyticsCustomize, setShowAnalyticsCustomize] = useState(false);
-  // Fine-grained dropdown toggles (keep it light by default)
   const [analyticsSections, setAnalyticsSections] = useState({
     kpis: true,
     trend: false,
@@ -143,7 +149,6 @@ export default function TasksPage() {
           setTasks(parsed.tasks || []);
           setExpandedTasks(new Set(parsed.expandedTasks || []));
           setSelectedTasksForAnalytics(new Set(parsed.selectedTasksForAnalytics || []));
-          // restore analytics section prefs if available
           if (parsed.analyticsSections) setAnalyticsSections(parsed.analyticsSections);
           if (typeof parsed.showAnalytics === "boolean") setShowAnalytics(parsed.showAnalytics);
         }
@@ -245,7 +250,7 @@ export default function TasksPage() {
     if (Notification.permission === "granted") new Notification(title, { body });
     else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") new Notification(title, { body }); });
   };
-  const clearPomoInterval = () => { if (pomoIntervalRef.current) clearInterval(pomoIntervalRef.current); }
+  const clearPomoInterval = () => { if (pomoIntervalRef.current) clearInterval(pomoIntervalRef.current); };
   const tickPomo = () => setPomoRemaining(prev => Math.max(0, prev - 1));
   const beginWorkCycle = () => { setPomoMode("work"); setPomoRemaining(pomo.work * 60); clearPomoInterval(); pomoIntervalRef.current = setInterval(tickPomo, 1000); };
   const stopPomo = () => { setPomoMode("off"); setPomoRemaining(0); clearPomoInterval(); };
@@ -480,7 +485,6 @@ export default function TasksPage() {
     const totalTime = rows.reduce((s, r) => s + r.totalTime, 0);
     const sessions = rows.reduce((s, r) => s + r.logCount, 0);
 
-    // build day buckets
     const dayMap = {};
     rows.forEach(r => r.filteredLogs.forEach(l => {
       const k = fmtDay(l.timestamp || l.end || l.start);
@@ -488,7 +492,6 @@ export default function TasksPage() {
     }));
     const days = Object.keys(dayMap).sort().map(d => ({ date: d, value: dayMap[d] }));
 
-    // hour-of-day & weekday
     const hour = Array.from({ length: 24 }, () => 0);
     const wday = Array.from({ length: 7 }, () => 0); // Sun..Sat
     rows.forEach(r => r.filteredLogs.forEach(l => {
@@ -497,14 +500,12 @@ export default function TasksPage() {
       wday[end.getDay()] += l.duration;
     }));
 
-    // share per task
     const share = rows
       .filter(r => r.totalTime > 0)
       .sort((a,b)=>b.totalTime-a.totalTime)
       .slice(0, 8)
       .map(r => ({ id: r.id, name: r.fullPath, value: r.totalTime }));
 
-    // sessions table
     const sessionsFlat = [];
     rows.forEach(r => r.filteredLogs.forEach(l => sessionsFlat.push({
       taskId: r.id, taskPath: r.fullPath, start: l.start || l.timestamp, end: l.end || l.timestamp, duration: l.duration, note: l.note || ""
@@ -520,7 +521,6 @@ export default function TasksPage() {
     return total / analyticsSummary.days.length;
   }, [analyticsSummary.days]);
 
-  /* CSV export for analytics sessions */
   const exportAnalyticsCSV = () => {
     const rows = [["Task Path","Start","End","Duration (ms)","Duration (readable)","Note"]];
     analyticsSummary.sessionsFlat
@@ -551,10 +551,11 @@ export default function TasksPage() {
           <Calendar className="w-3 h-3" />{new Date(t.dueDate).toLocaleDateString()}
         </span>
       )}
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border
-        ${t.priority === 'Critical' ? 'border-red-400/50 text-red-200'
+      <span className={cn(
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded border",
+        t.priority === 'Critical' ? 'border-red-400/50 text-red-200'
         : t.priority === 'High' ? 'border-amber-400/50 text-amber-200'
-        : t.priority === 'Medium' ? 'border-cyan-400/40 text-cyan-200' : 'border-slate-400/40 text-slate-300'}`}>
+        : t.priority === 'Medium' ? 'border-cyan-400/40 text-cyan-200' : 'border-slate-400/40 text-slate-300')}>
         <Info className="w-3 h-3" />{t.priority}
       </span>
     </div>
@@ -570,41 +571,41 @@ export default function TasksPage() {
     return (
       <div key={task.id} className="mb-2">
         <div
-          className={`p-3 rounded-lg border transition-all ${isActive ? 'bg-blue-900/20 border-blue-500 shadow-lg' : 'bg-gray-800/70 border-white/10 hover:bg-gray-800/90'}`}
+          className={cn(
+            "p-3 sm:p-4 rounded-xl border transition-all outline-none focus-within:ring-2 focus-within:ring-cyan-400/40",
+            isActive
+              ? "bg-cyan-900/15 border-cyan-400/40 shadow-[0_0_0_1px_rgba(34,211,238,0.25)_inset,0_10px_30px_-15px_rgba(8,145,178,0.45)]"
+              : "bg-white/6 border-white/10 hover:bg-white/9"
+          )}
           style={{ marginLeft: `${level * 20}px` }}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 {hasSub && (
-                  <button onClick={() => toggleExpanded(task.id)} className="text-gray-400 hover:text-gray-200">
+                  <button onClick={() => toggleExpanded(task.id)} className="text-gray-400 hover:text-gray-200 p-1 rounded-lg focus-visible:ring-2 focus-visible:ring-cyan-400/40">
                     {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   </button>
                 )}
                 {editingTask === task.id ? (
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-2">
-                    <input className="md:col-span-2 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100"
-                           value={editObj.name} onChange={e => setEditObj(o => ({...o, name: e.target.value}))} placeholder="Task name"/>
-                    <input className="md:col-span-2 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100"
-                           value={editObj.description} onChange={e => setEditObj(o => ({...o, description: e.target.value}))} placeholder="Description"/>
-                    <select className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100"
-                            value={editObj.priority} onChange={e => setEditObj(o => ({...o, priority: e.target.value}))}>
+                    <input className={cn(inputBase, "md:col-span-2")} value={editObj.name} onChange={e => setEditObj(o => ({...o, name: e.target.value}))} placeholder="Task name"/>
+                    <input className={cn(inputBase, "md:col-span-2")} value={editObj.description} onChange={e => setEditObj(o => ({...o, description: e.target.value}))} placeholder="Description"/>
+                    <select className={inputBase} value={editObj.priority} onChange={e => setEditObj(o => ({...o, priority: e.target.value}))}>
                       {PRIORITY.map(p => <option key={p}>{p}</option>)}
                     </select>
-                    <input type="date" className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100"
-                           value={editObj.dueDate} onChange={e => setEditObj(o => ({...o, dueDate: e.target.value}))}/>
-                    <input className="md:col-span-3 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100"
-                           value={editObj.tags} onChange={e => setEditObj(o => ({...o, tags: e.target.value}))} placeholder="tags, comma,separated"/>
+                    <input type="date" className={inputBase} value={editObj.dueDate} onChange={e => setEditObj(o => ({...o, dueDate: e.target.value}))}/>
+                    <input className={cn(inputBase, "md:col-span-3")} value={editObj.tags} onChange={e => setEditObj(o => ({...o, tags: e.target.value}))} placeholder="tags, comma,separated"/>
                     <div className="flex gap-2">
-                      <button onClick={saveEdit} className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-sm">Save</button>
-                      <button onClick={() => setEditingTask(null)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm">Cancel</button>
+                      <button onClick={saveEdit} className={btnPrimary}>Save</button>
+                      <button onClick={() => setEditingTask(null)} className={btnSoft}>Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-start gap-3 flex-1">
                     <div className="font-medium text-gray-100">{task.name}</div>
                     {isActive && (
-                      <div className="flex items-center gap-1 text-blue-400">
+                      <div className="flex items-center gap-1 text-cyan-300">
                         <Clock className="w-4 h-4" /><span className="text-sm">{msToHMS(elapsedTime)}</span>
                       </div>
                     )}
@@ -632,7 +633,7 @@ export default function TasksPage() {
                               {new Date(l.start || l.timestamp).toLocaleString()} → {new Date(l.end || l.timestamp).toLocaleTimeString()}
                               {' · '} {msToHMS(l.duration)} {l.note ? ` · ${l.note}` : ''}
                             </span>
-                            <button onClick={() => removeLog(task.id, l.id)} className="text-red-300/80 hover:text-red-200">
+                            <button onClick={() => removeLog(task.id, l.id)} className="p-1 rounded text-red-300/80 hover:text-red-200 focus-visible:ring-2 focus-visible:ring-red-400/40">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -648,36 +649,35 @@ export default function TasksPage() {
             <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-2">
               {!isActive ? (
                 <div className="flex gap-1">
-                  <button onClick={() => startTimer(task.id)} className="p-1 text-green-400 hover:text-green-300 hover:bg-green-900/20 rounded" title="Start Timer">
+                  <button onClick={() => startTimer(task.id)} className="p-2 rounded-lg text-green-300 hover:text-green-200 hover:bg-green-900/20 outline-none focus-visible:ring-2 focus-visible:ring-green-400/40" title="Start Timer">
                     <Play className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
                 <div className="flex gap-1">
                   {!isPaused ? (
-                    <button onClick={pauseTimer} className="p-1 text-yellow-300 hover:text-yellow-200 hover:bg-yellow-900/20 rounded" title="Pause">
+                    <button onClick={pauseTimer} className="p-2 rounded-lg text-yellow-200 hover:bg-yellow-900/20 outline-none focus-visible:ring-2 focus-visible:ring-yellow-400/40" title="Pause">
                       <Pause className="w-4 h-4" />
                     </button>
                   ) : (
-                    <button onClick={resumeTimer} className="p-1 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-900/20 rounded" title="Resume">
+                    <button onClick={resumeTimer} className="p-2 rounded-lg text-emerald-200 hover:bg-emerald-900/20 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40" title="Resume">
                       <Play className="w-4 h-4" />
                     </button>
                   )}
-                  <button onClick={stopTimer} className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded" title="Stop & Log">
+                  <button onClick={stopTimer} className="p-2 rounded-lg text-red-300 hover:bg-red-900/20 outline-none focus-visible:ring-2 focus-visible:ring-red-400/40" title="Stop & Log">
                     <Square className="w-4 h-4" />
                   </button>
                 </div>
               )}
 
-              <select value={task.status} onChange={(e) => updateTaskStatus(task.id, e.target.value)}
-                      className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100 text-xs">
+              <select value={task.status} onChange={(e) => updateTaskStatus(task.id, e.target.value)} className={inputBase}>
                 {STATUS.map(s => <option key={s}>{s}</option>)}
               </select>
 
-              <button onClick={() => startEditing(task)} className="p-1 text-gray-300 hover:text-gray-100 hover:bg-gray-700 rounded" title="Edit">
+              <button onClick={() => startEditing(task)} className="p-2 rounded-lg text-gray-300 hover:text-gray-100 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-cyan-400/40" title="Edit">
                 <Edit2 className="w-4 h-4" />
               </button>
-              <button onClick={() => deleteTask(task.id)} className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded" title="Delete">
+              <button onClick={() => deleteTask(task.id)} className="p-2 rounded-lg text-red-300 hover:text-red-200 hover:bg-red-900/20 focus-visible:ring-2 focus-visible:ring-red-400/40" title="Delete">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -698,111 +698,107 @@ export default function TasksPage() {
   ========================= */
   if (loading) {
     return (
-      <div className={`${THEME.bg} min-h-screen flex items-center justify-center`}>
+      <div className={cn(THEME.bg, "min-h-screen flex items-center justify-center")}>
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin mx-auto mb-4" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`${THEME.bg} min-h-screen p-4`}>
-      <div className="max-w-7xl mx-auto">
+    <div className={THEME.bg}>
+      <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 py-4 md:py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Timer className="h-8 w-8 text-blue-400" />
-            <h1 className="text-3xl font-black text-slate-100">Task Time Tracker</h1>
-            <span className="text-[11px] px-2 py-0.5 border border-cyan-400/30 text-cyan-200/90 rounded">Analytics (Collapsible)</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <User className="w-4 h-4 text-gray-400" />
-              <input type="email" value={user.email} onChange={(e) => setUser({ email: e.target.value, name: e.target.value.split("@")[0] })}
-                     placeholder="Enter your email"
-                     className="px-3 py-1 bg-gray-700 border border-gray-600 rounded text-gray-100 text-sm" />
-            </div>
-
-            {lastSync && (
-              <div className="hidden md:flex items-center gap-1 text-xs text-gray-400">
-                <Save className="w-3 h-3" /> Last saved: {lastSync.toLocaleTimeString()}
-              </div>
-            )}
-
-            {/* Collapsible Analytics Button + Customize dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowAnalytics(s => !s)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${showAnalytics ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}>
-                <BarChart3 className="w-4 h-4" /> {showAnalytics ? "Hide Analytics" : "Show Analytics"}
-              </button>
-              {showAnalytics && (
-                <button
-                  onClick={() => setShowAnalyticsCustomize(v => !v)}
-                  className="ml-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-100 text-sm">
-                  Customize
-                </button>
-              )}
-              {showAnalytics && showAnalyticsCustomize && (
-                <div className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-gray-800/95 p-3 z-10">
-                  <div className="text-xs text-slate-300 mb-2">Analytics sections</div>
-                  {[
-                    ["kpis", "KPI Cards"],
-                    ["trend", "Time Trend"],
-                    ["donut", "Task Share (Donut)"],
-                    ["heatmap", "Calendar Heatmap"],
-                    ["distributions", "Hour & Weekday Bars"],
-                    ["top", "Top Tasks Table"],
-                    ["sessions", "Sessions Explorer"],
-                  ].map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2 py-1 text-sm text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={!!analyticsSections[key]}
-                        onChange={() => setAnalyticsSections(s => ({ ...s, [key]: !s[key] }))}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
+        <div className="mb-5 sm:mb-6">
+          <div className={cn(THEME.panel, "rounded-2xl p-3 sm:p-4 md:p-5")}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="relative">
+                  <span className="absolute inset-0 blur-md opacity-60 bg-cyan-400/30 rounded-full" />
+                  <Timer className="relative h-7 w-7 sm:h-8 sm:w-8 text-cyan-300" />
                 </div>
-              )}
-            </div>
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-50 tracking-tight">Task Time Tracker</h1>
+                  <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] sm:text-xs px-2 py-0.5 border border-cyan-400/30 text-cyan-200/90 rounded-full">
+                    <BarChart3 className="w-3 h-3" /> Analytics (Collapsible)
+                  </span>
+                </div>
+              </div>
 
-            <button onClick={undo} className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200" title="Undo">
-              <Undo className="w-4 h-4" />
-            </button>
-            <button onClick={redo} className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200" title="Redo">
-              <Redo className="w-4 h-4" />
-            </button>
+              <div className="flex items-center gap-2 sm:gap-3 justify-between sm:justify-end">
+                <div className="hidden sm:flex items-center gap-2">
+                  <User className="w-4 h-4 text-gray-400" />
+                  <input
+                    type="email"
+                    value={user.email}
+                    onChange={(e) => setUser({ email: e.target.value, name: e.target.value.split("@")[0] })}
+                    placeholder="Enter your email"
+                    className={inputBase}
+                  />
+                </div>
+
+                {lastSync && (
+                  <div className="hidden md:flex items-center gap-1 text-xs text-gray-400">
+                    <Save className="w-3 h-3" /> Last saved: {lastSync.toLocaleTimeString()}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <button
+                    onClick={() => setShowAnalytics(s => !s)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40",
+                      showAnalytics ? "bg-cyan-600 hover:bg-cyan-500 text-white" : "bg-white/8 hover:bg-white/12 text-gray-200"
+                    )}
+                  >
+                    <BarChart3 className="w-4 h-4" /> {showAnalytics ? "Hide" : "Analytics"}
+                  </button>
+
+                  {showAnalytics && (
+                    <button
+                      onClick={() => setShowAnalyticsCustomize(v => !v)}
+                      className={cn(btnSoft, "text-sm")}
+                    >
+                      Customize
+                    </button>
+                  )}
+
+                  <button onClick={undo} className="p-2 bg-white/8 hover:bg-white/12 rounded-lg text-gray-200 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40" title="Undo">
+                    <Undo className="w-4 h-4" />
+                  </button>
+                  <button onClick={redo} className="p-2 bg-white/8 hover:bg-white/12 rounded-lg text-gray-200 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40" title="Redo">
+                    <Redo className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Top Summary + Search + Add Task */}
-        <div className={`${THEME.panel} rounded-xl p-4 mb-6`}>
-          <div className="grid lg:grid-cols-4 gap-4">
-            <div className="text-center">
+        <div className={cn(THEME.panel, "rounded-2xl p-3 sm:p-4 md:p-6 mb-6")}>
+          <div className="grid gap-3 sm:gap-4 lg:grid-cols-4">
+            <div className="text-center lg:text-left">
               <div className="text-sm text-slate-300/80">Total Time Tracked</div>
-              <div className="text-3xl font-bold text-blue-300">{msToHMS(totalTimeAllTasks)}</div>
+              <div className="text-3xl font-bold text-cyan-300">{msToHMS(totalTimeAllTasks)}</div>
               <div className="text-xs text-slate-400 mt-1">{tasks.length} tasks · {allTasksFlat.length} total items</div>
             </div>
             <div className="lg:col-span-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-2 sm:gap-3">
+                <div className="flex items-center gap-2 px-3 py-2 bg-white/6 border border-white/10 rounded-lg">
                   <Search className="w-4 h-4 text-slate-300/80" />
-                  <input id="search" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="Search tasks, descriptions, tags…"
-                         className="bg-transparent outline-none text-slate-100 text-sm w-64 md:w-96"/>
+                  <input id="search" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="Search tasks, descriptions, tags…" className="bg-transparent outline-none text-slate-100 text-sm w-full sm:w-80"/>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-slate-300/80" />
-                  <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100">
+
+                <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 w-full sm:w-auto">
+                  <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className={inputBase}>
                     <option>All</option>{STATUS.map(s => <option key={s}>{s}</option>)}
                   </select>
-                  <select value={filterTag} onChange={e=>setFilterTag(e.target.value)} className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100">
+                  <select value={filterTag} onChange={e=>setFilterTag(e.target.value)} className={inputBase}>
                     <option>All</option>{allTags.map(t => <option key={t}>{t}</option>)}
                   </select>
-                  <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100">
+                  <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className={inputBase}>
                     <option value="created">Sort: Created</option>
                     <option value="name">Sort: Name</option>
                     <option value="time">Sort: Time</option>
@@ -811,51 +807,47 @@ export default function TasksPage() {
                   </select>
                 </div>
 
-                {/* Import/Export */}
-                <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200 flex items-center gap-2">
-                  <Upload className="w-4 h-4" /> Import
-                </button>
-                <input ref={fileInputRef} type="file" accept=".json" onChange={(e) => {
-                  const file = e.target.files?.[0]; if (!file) return;
-                  const r = new FileReader();
-                  r.onload = (ev) => {
-                    try {
-                      const imported = JSON.parse(ev.target.result);
-                      if (!Array.isArray(imported.tasks)) throw new Error("Invalid file");
-                      setHistory(h => [...h, deepClone(tasks)]);
-                      setTasks(imported.tasks);
-                      if (imported.expandedTasks) setExpandedTasks(new Set(imported.expandedTasks));
-                      if (imported.selectedTasksForAnalytics) setSelectedTasksForAnalytics(new Set(imported.selectedTasksForAnalytics));
-                      if (imported.analyticsSections) setAnalyticsSections(imported.analyticsSections);
-                      if (typeof imported.showAnalytics === "boolean") setShowAnalytics(imported.showAnalytics);
-                      if (imported.user) setUser(imported.user);
-                      alert(`Imported ${imported.tasks.length} top-level tasks`);
-                    } catch (err) { alert("Import failed: " + err.message); }
-                  };
-                  r.readAsText(file);
-                  e.target.value = "";
-                }} className="hidden" />
+                {/* Import/Export & Add Task */}
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:ml-auto">
+                  <div className="flex gap-2">
+                    <button onClick={() => fileInputRef.current?.click()} className={btnSoft}>
+                      <Upload className="w-4 h-4" /> Import
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        const r = new FileReader();
+                        r.onload = (ev) => {
+                          try {
+                            const imported = JSON.parse(ev.target.result);
+                            if (!Array.isArray(imported.tasks)) throw new Error("Invalid file");
+                            setHistory(h => [...h, deepClone(tasks)]);
+                            setTasks(imported.tasks);
+                            if (imported.expandedTasks) setExpandedTasks(new Set(imported.expandedTasks));
+                            if (imported.selectedTasksForAnalytics) setSelectedTasksForAnalytics(new Set(imported.selectedTasksForAnalytics));
+                            if (imported.analyticsSections) setAnalyticsSections(imported.analyticsSections);
+                            if (typeof imported.showAnalytics === "boolean") setShowAnalytics(imported.showAnalytics);
+                            if (imported.user) setUser(imported.user);
+                            alert(`Imported ${imported.tasks.length} top-level tasks`);
+                          } catch (err) { alert("Import failed: " + err.message); }
+                        };
+                        r.readAsText(file);
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                    />
+                  </div>
 
-                {/* --- Add Task (quick) --- */}
-                <div className="flex items-center gap-2 ml-auto">
-                  <input
-                    value={newTaskName}
-                    onChange={(e)=>setNewTaskName(e.target.value)}
-                    placeholder="New task name"
-                    className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100"
-                  />
-                  <input
-                    value={newTaskTag}
-                    onChange={(e)=>setNewTaskTag(e.target.value)}
-                    placeholder="Tag (optional)"
-                    className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100"
-                  />
-                  <button
-                    onClick={addTask}
-                    disabled={!newTaskName.trim()}
-                    className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-white">
-                    <Plus className="w-4 h-4" /> Add Task
-                  </button>
+                  <div className="flex gap-2">
+                    <input value={newTaskName} onChange={(e)=>setNewTaskName(e.target.value)} placeholder="New task name" className={inputBase} />
+                    <input value={newTaskTag} onChange={(e)=>setNewTaskTag(e.target.value)} placeholder="Tag (optional)" className={inputBase} />
+                    <button onClick={addTask} disabled={!newTaskName.trim()} className={btnPrimary}>
+                      <Plus className="w-4 h-4" /> Add
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -864,25 +856,24 @@ export default function TasksPage() {
 
         {/* ============== ANALYTICS: Collapsible ============== */}
         {showAnalytics && (
-          <div className={`${THEME.panel} rounded-xl p-6 mb-8 print:bg-white print:text-black`}>
-            <div className="flex items-center justify-between gap-3 mb-6">
+          <div className={cn(THEME.panel, "rounded-2xl p-3 sm:p-4 md:p-6 mb-8 print:bg-white print:text-black")}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
               <h2 className="text-2xl font-bold text-gray-100">Analytics Dashboard</h2>
               <div className="flex items-center gap-2">
-                <button onClick={printReport} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded text-slate-100 text-sm flex items-center gap-2">
+                <button onClick={printReport} className={cn(btnSoft, "flex items-center gap-2")}>
                   <Printer className="w-4 h-4" /> Print / Save PDF
                 </button>
-                <button onClick={exportAnalyticsCSV} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200 text-sm flex items-center gap-2">
+                <button onClick={exportAnalyticsCSV} className={cn(btnSoft, "flex items-center gap-2")}>
                   <Download className="w-4 h-4" /> Export Sessions CSV
                 </button>
               </div>
             </div>
 
             {/* Controls Row */}
-            <div className="grid md:grid-cols-4 gap-3 mb-6">
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-6">
               <div>
                 <label className="block text-sm text-slate-300 mb-2">Time Period</label>
-                <select value={analyticsPeriod} onChange={(e)=>setAnalyticsPeriod(e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100">
+                <select value={analyticsPeriod} onChange={(e)=>setAnalyticsPeriod(e.target.value)} className={inputBase}>
                   {Object.entries(ANALYTICS_PERIODS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
@@ -890,23 +881,17 @@ export default function TasksPage() {
                 <>
                   <div>
                     <label className="block text-sm text-slate-300 mb-2">Start</label>
-                    <input type="date" value={analyticsStartDate} onChange={(e)=>setAnalyticsStartDate(e.target.value)}
-                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100" />
+                    <input type="date" value={analyticsStartDate} onChange={(e)=>setAnalyticsStartDate(e.target.value)} className={inputBase} />
                   </div>
                   <div>
                     <label className="block text-sm text-slate-300 mb-2">End</label>
-                    <input type="date" value={analyticsEndDate} onChange={(e)=>setAnalyticsEndDate(e.target.value)}
-                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100" />
+                    <input type="date" value={analyticsEndDate} onChange={(e)=>setAnalyticsEndDate(e.target.value)} className={inputBase} />
                   </div>
                 </>
               )}
               <div className="md:col-span-2">
                 <label className="block text-sm text-slate-300 mb-2">Pick Tasks (type to filter)</label>
-                <TaskPicker
-                  items={allTasksFlat}
-                  selected={selectedTasksForAnalytics}
-                  onChange={setSelectedTasksForAnalytics}
-                />
+                <TaskPicker items={allTasksFlat} selected={selectedTasksForAnalytics} onChange={setSelectedTasksForAnalytics} />
               </div>
             </div>
 
@@ -950,11 +935,11 @@ export default function TasksPage() {
                 )}
                 {analyticsSections.distributions && (
                   <div className="grid gap-6">
-                    <div className="">
+                    <div>
                       <PanelTitle title="By Hour of Day" subtitle="When you’re most active" />
                       <BarsHorizontal labels={Array.from({length:24},(_,i)=>`${i}:00`)} values={analyticsSummary.hour} />
                     </div>
-                    <div className="">
+                    <div>
                       <PanelTitle title="By Day of Week" subtitle="Workload distribution" />
                       <BarsHorizontal labels={["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]} values={analyticsSummary.wday} />
                     </div>
@@ -967,70 +952,74 @@ export default function TasksPage() {
             {analyticsSections.top && (
               <div className="mb-6">
                 <PanelTitle title="Top Tasks" subtitle="Sorted by total time" />
-                <TopTasksTable rows={analyticsSummary.rows
-                  .filter(r=>r.totalTime>0)
-                  .sort((a,b)=>b.totalTime-a.totalTime)
-                  .slice(0,12)}
-                />
+                <div className={cn(THEME.subpanel, "rounded-xl overflow-hidden")}>
+                  <div className="overflow-x-auto">
+                    <TopTasksTable rows={analyticsSummary.rows
+                      .filter(r=>r.totalTime>0)
+                      .sort((a,b)=>b.totalTime-a.totalTime)
+                      .slice(0,12)}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
             {/* Sessions Explorer */}
             {analyticsSections.sessions && (
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                   <PanelTitle title="Sessions Explorer" subtitle="Filter & export" tight />
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 px-2 py-1 bg-white/5 border border-white/10 rounded">
                       <Search className="w-4 h-4 text-slate-300/80" />
-                      <input value={sessionFilterQuery} onChange={e=>setSessionFilterQuery(e.target.value)} placeholder="Search in task path / note"
-                             className="bg-transparent outline-none text-slate-100 text-sm"/>
+                      <input value={sessionFilterQuery} onChange={e=>setSessionFilterQuery(e.target.value)} placeholder="Search in task path / note" className="bg-transparent outline-none text-slate-100 text-sm"/>
                     </div>
-                    <button onClick={exportAnalyticsCSV} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200 text-sm flex items-center gap-2">
+                    <button onClick={exportAnalyticsCSV} className={cn(btnSoft, "flex items-center gap-2")}>
                       <Download className="w-4 h-4" /> CSV
                     </button>
                   </div>
                 </div>
-                <SessionsTable rows={analyticsSummary.sessionsFlat} query={sessionFilterQuery} />
+                <div className={cn(THEME.subpanel, "rounded-xl overflow-hidden")}>
+                  <div className="overflow-x-auto">
+                    <SessionsTable rows={analyticsSummary.sessionsFlat} query={sessionFilterQuery} />
+                  </div>
+                </div>
               </div>
             )}
           </div>
         )}
 
         {/* Manual Entry */}
-        <div className={`${THEME.panel} rounded-xl p-6 mb-8`}>
-          <h3 className="text-xl font-semibold text-gray-200 mb-4">Manual Time Entry</h3>
-          <div className="flex flex-wrap gap-4 items-end">
+        <div className={cn(THEME.panel, "rounded-2xl p-3 sm:p-4 md:p-6 mb-8")}>
+          <h3 className="text-lg sm:text-xl font-semibold text-gray-200 mb-4">Manual Time Entry</h3>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-end">
             <div className="flex-1 min-w-[220px]">
               <label className="block text-sm text-gray-300 mb-2">Select Task</label>
-              <select value={manualTaskId} onChange={e=>setManualTaskId(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100">
+              <select value={manualTaskId} onChange={e=>setManualTaskId(e.target.value)} className={inputBase}>
                 <option value="">Choose a task…</option>
                 {allTasksFlat.map(t => <option key={t.id} value={t.id}>{t.fullPath}</option>)}
               </select>
             </div>
             <div className="flex-1 min-w-[220px]">
               <label className="block text-sm text-gray-300 mb-2">Duration <span className="text-gray-500">(e.g., 25m, 1h 30m, 45s)</span></label>
-              <input type="text" placeholder="25m, 1h 30m…" value={manualTime} onChange={e=>setManualTime(e.target.value)}
-                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400"/>
+              <input type="text" placeholder="25m, 1h 30m…" value={manualTime} onChange={e=>setManualTime(e.target.value)} className={inputBase}/>
             </div>
             <div className="min-w-[220px]">
               <label className="block text-sm text-gray-300 mb-2">End Date & Time</label>
-              <input type="datetime-local" value={manualWhen} onChange={e=>setManualWhen(e.target.value)}
-                     className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100"/>
+              <input type="datetime-local" value={manualWhen} onChange={e=>setManualWhen(e.target.value)} className={inputBase}/>
             </div>
-            <button onClick={addManualTime} disabled={!manualTime.trim() || !manualTaskId}
-                    className="px-6 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-lg text-white font-medium flex items-center gap-2">
+            <button onClick={addManualTime} disabled={!manualTime.trim() || !manualTaskId} className={btnPrimary}>
               <Clock className="w-4 h-4" /> Log Time
             </button>
           </div>
         </div>
 
         {/* Task List */}
-        <div className={`${THEME.panel} rounded-xl p-6`}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-semibold text-gray-200">Tasks & Projects</h2>
+        <div className={cn(THEME.panel, "rounded-2xl p-3 sm:p-4 md:p-6")}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-200">Tasks & Projects</h2>
             {tasks.length > 0 && (
-              <div className="text-sm text-gray-400">
+              <div className="text-xs sm:text-sm text-gray-400">
                 {tasks.length} main tasks · {allTasksFlat.length} total items
               </div>
             )}
@@ -1049,6 +1038,32 @@ export default function TasksPage() {
           )}
         </div>
       </div>
+
+      {/* Sticky Timer Bar (mobile) */}
+      {activeTimer && (
+        <div className="md:hidden fixed bottom-3 left-3 right-3 z-40">
+          <div className="rounded-2xl border border-cyan-400/30 bg-slate-900/80 backdrop-blur-xl shadow-[0_10px_30px_-12px_rgba(8,145,178,0.6)] px-3 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlarmClockCheck className="w-5 h-5 text-cyan-300" />
+              <span className="text-sm text-slate-200">Active · {msToHMS(elapsedTime)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {!isPaused ? (
+                <button onClick={pauseTimer} className="p-2 rounded-lg text-yellow-200 hover:bg-yellow-900/20 outline-none focus-visible:ring-2 focus-visible:ring-yellow-400/40">
+                  <Pause className="w-4 h-4" />
+                </button>
+              ) : (
+                <button onClick={resumeTimer} className="p-2 rounded-lg text-emerald-200 hover:bg-emerald-900/20 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40">
+                  <Play className="w-4 h-4" />
+                </button>
+              )}
+              <button onClick={stopTimer} className="p-2 rounded-lg text-red-300 hover:bg-red-900/20 outline-none focus-visible:ring-2 focus-visible:ring-red-400/40">
+                <Square className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1058,16 +1073,16 @@ export default function TasksPage() {
 ========================= */
 function KPI({ title, value, accent = "text-slate-200" }) {
   return (
-    <div className="bg-gray-700/60 rounded-lg p-4 border border-white/10">
+    <div className="bg-white/6 rounded-lg p-4 border border-white/10">
       <div className="text-sm text-slate-300/80">{title}</div>
-      <div className={`text-2xl font-bold ${accent}`}>{value}</div>
+      <div className={cn("text-2xl font-bold", accent)}>{value}</div>
     </div>
   );
 }
 function PanelTitle({ title, subtitle, tight }) {
   return (
-    <div className={`mb-${tight ? "1" : "3"}`}>
-      <div className="text-base font-semibold text-slate-100">{title}</div>
+    <div className={cn(tight ? "mb-1" : "mb-3")}>
+      <div className="text-base sm:text-lg font-semibold text-slate-100">{title}</div>
       {subtitle && <div className="text-xs text-slate-400">{subtitle}</div>}
     </div>
   );
@@ -1093,7 +1108,7 @@ function TaskPicker({ items, selected, onChange }) {
         <Search className="w-4 h-4 text-slate-300/80" />
         <input value={q} onChange={(e)=>setQ(e.target.value)} placeholder="Filter tasks…" className="bg-transparent outline-none text-slate-100 text-sm flex-1"/>
         <span className="text-xs text-slate-400">{selected.size} selected</span>
-        <button onClick={()=>onChange(new Set())} className="text-xs text-blue-300 hover:text-blue-200">Clear</button>
+        <button onClick={()=>onChange(new Set())} className="text-xs text-cyan-300 hover:text-cyan-200">Clear</button>
       </div>
       <div className="max-h-40 overflow-y-auto p-2 grid md:grid-cols-2 gap-1">
         {match.map(t => (
@@ -1126,7 +1141,7 @@ function AreaTrend({ data, height = 160 }) {
     : "";
 
   return (
-    <div className="w-full rounded-lg border border-white/10 bg-white/5 p-3">
+    <div className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
       <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }}>
         {/* axes */}
         <line x1={padding} y1={height - padding} x2={w - padding} y2={height - padding} stroke="currentColor" opacity="0.2"/>
@@ -1155,7 +1170,7 @@ function Donut({ data, size = 220, stroke = 22 }) {
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3 flex items-center justify-center">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 flex items-center justify-center">
       <svg width={size} height={size}>
         <circle cx={center} cy={center} r={radius} fill="none" stroke="currentColor" opacity="0.1" strokeWidth={stroke}/>
         {data.map((d, i) => {
@@ -1199,7 +1214,6 @@ function Legend({ data }) {
 
 /* --- Calendar Heatmap --- */
 function CalendarHeatmap({ data, window }) {
-  // build day-by-day from window.start..end
   const start = startOfDay(window.start);
   const end = startOfDay(window.end);
   const map = new Map(data.map(d => [d.date, d.value]));
@@ -1209,7 +1223,6 @@ function CalendarHeatmap({ data, window }) {
     days.push({ date: key, value: map.get(key) || 0, dow: d.getDay() });
   }
   const max = Math.max(1, ...days.map(d=>d.value));
-  // Lay out weeks columns (like GitHub)
   const weeks = [];
   let chunk = [];
   days.forEach((day, idx) => {
@@ -1218,7 +1231,7 @@ function CalendarHeatmap({ data, window }) {
   });
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3 overflow-auto">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 overflow-auto">
       <div className="inline-flex gap-1">
         {weeks.map((wk, wi)=>(
           <div key={wi} className="grid gap-1" style={{gridTemplateRows: "repeat(7, 12px)"}}>
@@ -1244,15 +1257,15 @@ function CalendarHeatmap({ data, window }) {
 function BarsHorizontal({ labels, values }) {
   const max = Math.max(1, ...values);
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
       <div className="space-y-1">
         {labels.map((lab, i) => (
           <div key={lab} className="flex items-center gap-2">
-            <div className="w-16 shrink-0 text-[11px] text-slate-300/80">{lab}</div>
+            <div className="w-12 sm:w-16 shrink-0 text-[10px] sm:text-[11px] text-slate-300/80">{lab}</div>
             <div className="flex-1">
-              <div className="h-3 rounded bg-blue-500/30" style={{ width: `${Math.max(2, (values[i] / max) * 100)}%` }} />
+              <div className="h-3 rounded bg-cyan-500/30" style={{ width: `${Math.max(2, (values[i] / max) * 100)}%` }} />
             </div>
-            <div className="w-16 text-right text-[11px] text-slate-400">{values[i] ? msToHMS(values[i]) : ""}</div>
+            <div className="w-16 text-right text-[10px] sm:text-[11px] text-slate-400">{values[i] ? msToHMS(values[i]) : ""}</div>
           </div>
         ))}
       </div>
@@ -1263,36 +1276,34 @@ function BarsHorizontal({ labels, values }) {
 /* --- Top Tasks Table --- */
 function TopTasksTable({ rows }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-white/5 text-slate-300">
-          <tr>
-            <th className="text-left p-3">Task</th>
-            <th className="text-right p-3">Sessions</th>
-            <th className="text-right p-3">Avg / Session</th>
-            <th className="text-right p-3">Total</th>
-            <th className="text-right p-3">Share</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const total = rows.reduce((s,x)=>s+x.totalTime, 0) || 1;
-            return (
-              <tr key={r.id} className="border-t border-white/10 hover:bg-white/5">
-                <td className="p-3 text-slate-100">{r.fullPath}</td>
-                <td className="p-3 text-right text-slate-300">{r.logCount}</td>
-                <td className="p-3 text-right text-slate-300">{msToHMS(r.totalTime / Math.max(1, r.logCount))}</td>
-                <td className="p-3 text-right text-slate-100">{msToHMS(r.totalTime)}</td>
-                <td className="p-3 text-right text-slate-400">{((r.totalTime / total) * 100).toFixed(1)}%</td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 && (
-            <tr><td colSpan={5} className="p-3 text-center text-slate-400">No data</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <table className="min-w-[720px] w-full text-sm">
+      <thead className="bg-white/5 text-slate-300">
+        <tr>
+          <th className="text-left p-3">Task</th>
+          <th className="text-right p-3">Sessions</th>
+          <th className="text-right p-3">Avg / Session</th>
+          <th className="text-right p-3">Total</th>
+          <th className="text-right p-3">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(r => {
+          const total = rows.reduce((s,x)=>s+x.totalTime, 0) || 1;
+          return (
+            <tr key={r.id} className="border-t border-white/10 hover:bg-white/5">
+              <td className="p-3 text-slate-100">{r.fullPath}</td>
+              <td className="p-3 text-right text-slate-300">{r.logCount}</td>
+              <td className="p-3 text-right text-slate-300">{msToHMS(r.totalTime / Math.max(1, r.logCount))}</td>
+              <td className="p-3 text-right text-slate-100">{msToHMS(r.totalTime)}</td>
+              <td className="p-3 text-right text-slate-400">{((r.totalTime / total) * 100).toFixed(1)}%</td>
+            </tr>
+          );
+        })}
+        {rows.length === 0 && (
+          <tr><td colSpan={5} className="p-3 text-center text-slate-400">No data</td></tr>
+        )}
+      </tbody>
+    </table>
   );
 }
 
@@ -1305,32 +1316,30 @@ function SessionsTable({ rows, query }) {
   }, [rows, query]);
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 overflow-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-white/5 text-slate-300 sticky top-0">
-          <tr>
-            <th className="text-left p-3">Task</th>
-            <th className="text-left p-3">Start</th>
-            <th className="text-left p-3">End</th>
-            <th className="text-right p-3">Duration</th>
-            <th className="text-left p-3">Note</th>
+    <table className="min-w-[820px] w-full text-sm">
+      <thead className="bg-white/5 text-slate-300 sticky top-0">
+        <tr>
+          <th className="text-left p-3">Task</th>
+          <th className="text-left p-3">Start</th>
+          <th className="text-left p-3">End</th>
+          <th className="text-right p-3">Duration</th>
+          <th className="text-left p-3">Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filtered.map((s, i) => (
+          <tr key={i} className="border-t border-white/10 hover:bg-white/5">
+            <td className="p-3 text-slate-100 min-w-[260px]">{s.taskPath}</td>
+            <td className="p-3 text-slate-300">{s.start ? new Date(s.start).toLocaleString() : "—"}</td>
+            <td className="p-3 text-slate-300">{s.end ? new Date(s.end).toLocaleString() : "—"}</td>
+            <td className="p-3 text-right text-slate-100">{msToHMS(s.duration)}</td>
+            <td className="p-3 text-slate-300">{s.note}</td>
           </tr>
-        </thead>
-        <tbody>
-          {filtered.map((s, i) => (
-            <tr key={i} className="border-t border-white/10 hover:bg-white/5">
-              <td className="p-3 text-slate-100 min-w-[260px]">{s.taskPath}</td>
-              <td className="p-3 text-slate-300">{s.start ? new Date(s.start).toLocaleString() : "—"}</td>
-              <td className="p-3 text-slate-300">{s.end ? new Date(s.end).toLocaleString() : "—"}</td>
-              <td className="p-3 text-right text-slate-100">{msToHMS(s.duration)}</td>
-              <td className="p-3 text-slate-300">{s.note}</td>
-            </tr>
-          ))}
-          {filtered.length === 0 && (
-            <tr><td colSpan={5} className="p-3 text-center text-slate-400">No sessions match your filter</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+        ))}
+        {filtered.length === 0 && (
+          <tr><td colSpan={5} className="p-3 text-center text-slate-400">No sessions match your filter</td></tr>
+        )}
+      </tbody>
+    </table>
   );
 }
