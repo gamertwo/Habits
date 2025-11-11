@@ -103,12 +103,24 @@ export default function TasksPage() {
   const [sortBy, setSortBy] = useState("created"); // created | name | time | due | priority
 
   /* ---------- Analytics ---------- */
-  const [showAnalytics, setShowAnalytics] = useState(true);
+  // Collapsed by default so it’s not overwhelming:
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsPeriod, setAnalyticsPeriod] = useState("week");
   const [analyticsStartDate, setAnalyticsStartDate] = useState("");
   const [analyticsEndDate, setAnalyticsEndDate] = useState("");
   const [selectedTasksForAnalytics, setSelectedTasksForAnalytics] = useState(new Set());
   const [sessionFilterQuery, setSessionFilterQuery] = useState("");
+  const [showAnalyticsCustomize, setShowAnalyticsCustomize] = useState(false);
+  // Fine-grained dropdown toggles (keep it light by default)
+  const [analyticsSections, setAnalyticsSections] = useState({
+    kpis: true,
+    trend: false,
+    donut: false,
+    heatmap: false,
+    distributions: false,
+    top: false,
+    sessions: false,
+  });
   const fileInputRef = useRef(null);
 
   /* ---------- Undo/Redo ---------- */
@@ -120,7 +132,7 @@ export default function TasksPage() {
   const idleCheckRef = useRef(null);
 
   /* =========================
-     Load / Save
+     Load / Save (Local Memory)
   ========================= */
   useEffect(() => {
     const load = () => {
@@ -131,9 +143,16 @@ export default function TasksPage() {
           setTasks(parsed.tasks || []);
           setExpandedTasks(new Set(parsed.expandedTasks || []));
           setSelectedTasksForAnalytics(new Set(parsed.selectedTasksForAnalytics || []));
+          // restore analytics section prefs if available
+          if (parsed.analyticsSections) setAnalyticsSections(parsed.analyticsSections);
+          if (typeof parsed.showAnalytics === "boolean") setShowAnalytics(parsed.showAnalytics);
         }
         setLastSync(new Date());
-      } catch (e) { console.error(e); } finally { setLoading(false); }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     };
     setTimeout(load, 200);
   }, [user.email]);
@@ -144,15 +163,19 @@ export default function TasksPage() {
         tasks: next,
         expandedTasks: Array.from(expandedTasks),
         selectedTasksForAnalytics: Array.from(selectedTasksForAnalytics),
+        analyticsSections,
+        showAnalytics,
         lastModified: new Date().toISOString(),
         user
       };
       localStorage.setItem(`taskTimeTracker_${user.email}`, JSON.stringify(payload));
       setLastSync(new Date());
     } catch (e) { console.error("save error", e); }
-  }, [tasks, expandedTasks, selectedTasksForAnalytics, user]);
+  }, [tasks, expandedTasks, selectedTasksForAnalytics, user, analyticsSections, showAnalytics]);
 
-  useEffect(() => { if (!loading) saveData(); }, [tasks, expandedTasks, selectedTasksForAnalytics, saveData, loading]);
+  useEffect(() => { if (!loading) saveData(); }, [
+    tasks, expandedTasks, selectedTasksForAnalytics, analyticsSections, showAnalytics, saveData, loading
+  ]);
 
   /* =========================
      Timer
@@ -419,24 +442,11 @@ export default function TasksPage() {
     const now = new Date();
     let start, end;
     switch (analyticsPeriod) {
-      case "day": {
-        start = startOfDay(now); end = new Date(start.getTime() + 86400000); break;
-      }
-      case "week": {
-        const s = new Date(now); s.setDate(now.getDate() - now.getDay()); start = startOfDay(s); end = new Date(start.getTime() + 7 * 86400000); break;
-      }
-      case "month": {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        end = new Date(now.getFullYear(), now.getMonth() + 1, 1); break;
-      }
-      case "quarter": {
-        const q = Math.floor(now.getMonth() / 3) * 3;
-        start = new Date(now.getFullYear(), q, 1);
-        end = new Date(now.getFullYear(), q + 3, 1); break;
-      }
-      case "year": {
-        start = new Date(now.getFullYear(), 0, 1); end = new Date(now.getFullYear() + 1, 0, 1); break;
-      }
+      case "day": { start = startOfDay(now); end = new Date(start.getTime() + 86400000); break; }
+      case "week": { const s = new Date(now); s.setDate(now.getDate() - now.getDay()); start = startOfDay(s); end = new Date(start.getTime() + 7 * 86400000); break; }
+      case "month": { start = new Date(now.getFullYear(), now.getMonth(), 1); end = new Date(now.getFullYear(), now.getMonth() + 1, 1); break; }
+      case "quarter": { const q = Math.floor(now.getMonth() / 3) * 3; start = new Date(now.getFullYear(), q, 1); end = new Date(now.getFullYear(), q + 3, 1); break; }
+      case "year": { start = new Date(now.getFullYear(), 0, 1); end = new Date(now.getFullYear() + 1, 0, 1); break; }
       case "custom": {
         if (analyticsStartDate && analyticsEndDate) {
           start = startOfDay(new Date(analyticsStartDate));
@@ -447,10 +457,7 @@ export default function TasksPage() {
         }
         break;
       }
-      default: {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      }
+      default: { start = new Date(now.getFullYear(), now.getMonth(), 1); end = new Date(now.getFullYear(), now.getMonth() + 1, 1); }
     }
     return { start, end };
   }, [analyticsPeriod, analyticsStartDate, analyticsEndDate]);
@@ -494,7 +501,7 @@ export default function TasksPage() {
     const share = rows
       .filter(r => r.totalTime > 0)
       .sort((a,b)=>b.totalTime-a.totalTime)
-      .slice(0, 8) // top 8 in donut
+      .slice(0, 8)
       .map(r => ({ id: r.id, name: r.fullPath, value: r.totalTime }));
 
     // sessions table
@@ -518,7 +525,7 @@ export default function TasksPage() {
     const rows = [["Task Path","Start","End","Duration (ms)","Duration (readable)","Note"]];
     analyticsSummary.sessionsFlat
       .filter(s => !sessionFilterQuery.trim() || s.taskPath.toLowerCase().includes(sessionFilterQuery.toLowerCase()) || s.note.toLowerCase().includes(sessionFilterQuery.toLowerCase()))
-      .forEach(s => rows.push([s.taskPath, s.start, s.end, s.duration, msToHMS(s.duration), s.note.replaceAll(",", ";")]));
+      .forEach(s => rows.push([s.taskPath, s.start, s.end, s.duration, msToHMS(s.duration), (s.note || "").replaceAll(",", ";")]));
     const csv = rows.map(r => r.map(v => `"${String(v ?? "").replaceAll('"','""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -707,7 +714,7 @@ export default function TasksPage() {
           <div className="flex items-center gap-3">
             <Timer className="h-8 w-8 text-blue-400" />
             <h1 className="text-3xl font-black text-slate-100">Task Time Tracker</h1>
-            <span className="text-[11px] px-2 py-0.5 border border-cyan-400/30 text-cyan-200/90 rounded">Analytics+ UI</span>
+            <span className="text-[11px] px-2 py-0.5 border border-cyan-400/30 text-cyan-200/90 rounded">Analytics (Collapsible)</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -724,10 +731,44 @@ export default function TasksPage() {
               </div>
             )}
 
-            <button onClick={() => setShowAnalytics(s => !s)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${showAnalytics ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}>
-              <BarChart3 className="w-4 h-4" /> Analytics
-            </button>
+            {/* Collapsible Analytics Button + Customize dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowAnalytics(s => !s)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${showAnalytics ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}>
+                <BarChart3 className="w-4 h-4" /> {showAnalytics ? "Hide Analytics" : "Show Analytics"}
+              </button>
+              {showAnalytics && (
+                <button
+                  onClick={() => setShowAnalyticsCustomize(v => !v)}
+                  className="ml-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-100 text-sm">
+                  Customize
+                </button>
+              )}
+              {showAnalytics && showAnalyticsCustomize && (
+                <div className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-gray-800/95 p-3 z-10">
+                  <div className="text-xs text-slate-300 mb-2">Analytics sections</div>
+                  {[
+                    ["kpis", "KPI Cards"],
+                    ["trend", "Time Trend"],
+                    ["donut", "Task Share (Donut)"],
+                    ["heatmap", "Calendar Heatmap"],
+                    ["distributions", "Hour & Weekday Bars"],
+                    ["top", "Top Tasks Table"],
+                    ["sessions", "Sessions Explorer"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 py-1 text-sm text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={!!analyticsSections[key]}
+                        onChange={() => setAnalyticsSections(s => ({ ...s, [key]: !s[key] }))}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <button onClick={undo} className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200" title="Undo">
               <Undo className="w-4 h-4" />
@@ -738,7 +779,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Top Summary + Search */}
+        {/* Top Summary + Search + Add Task */}
         <div className={`${THEME.panel} rounded-xl p-4 mb-6`}>
           <div className="grid lg:grid-cols-4 gap-4">
             <div className="text-center">
@@ -785,6 +826,8 @@ export default function TasksPage() {
                       setTasks(imported.tasks);
                       if (imported.expandedTasks) setExpandedTasks(new Set(imported.expandedTasks));
                       if (imported.selectedTasksForAnalytics) setSelectedTasksForAnalytics(new Set(imported.selectedTasksForAnalytics));
+                      if (imported.analyticsSections) setAnalyticsSections(imported.analyticsSections);
+                      if (typeof imported.showAnalytics === "boolean") setShowAnalytics(imported.showAnalytics);
                       if (imported.user) setUser(imported.user);
                       alert(`Imported ${imported.tasks.length} top-level tasks`);
                     } catch (err) { alert("Import failed: " + err.message); }
@@ -792,12 +835,34 @@ export default function TasksPage() {
                   r.readAsText(file);
                   e.target.value = "";
                 }} className="hidden" />
+
+                {/* --- Add Task (quick) --- */}
+                <div className="flex items-center gap-2 ml-auto">
+                  <input
+                    value={newTaskName}
+                    onChange={(e)=>setNewTaskName(e.target.value)}
+                    placeholder="New task name"
+                    className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100"
+                  />
+                  <input
+                    value={newTaskTag}
+                    onChange={(e)=>setNewTaskTag(e.target.value)}
+                    placeholder="Tag (optional)"
+                    className="px-2 py-2 bg-white/5 border border-white/10 rounded text-sm text-slate-100"
+                  />
+                  <button
+                    onClick={addTask}
+                    disabled={!newTaskName.trim()}
+                    className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-white">
+                    <Plus className="w-4 h-4" /> Add Task
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ============== ANALYTICS: SUPERCHARGED ============== */}
+        {/* ============== ANALYTICS: Collapsible ============== */}
         {showAnalytics && (
           <div className={`${THEME.panel} rounded-xl p-6 mb-8 print:bg-white print:text-black`}>
             <div className="flex items-center justify-between gap-3 mb-6">
@@ -846,71 +911,89 @@ export default function TasksPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid md:grid-cols-4 gap-4 mb-6">
-              <KPI title="Total Time" value={msToHMS(analyticsSummary.totalTime)} accent="text-green-400" />
-              <KPI title="Sessions" value={analyticsSummary.sessions} accent="text-blue-400" />
-              <KPI title="Avg / Day" value={kpiAvgPerDay ? msToHMS(kpiAvgPerDay) : "0s"} accent="text-purple-400" />
-              <KPI title="Active Tasks" value={analyticsSummary.rows.filter(r=>r.totalTime>0).length} accent="text-amber-400" />
-            </div>
+            {analyticsSections.kpis && (
+              <div className="grid md:grid-cols-4 gap-4 mb-6">
+                <KPI title="Total Time" value={msToHMS(analyticsSummary.totalTime)} accent="text-green-400" />
+                <KPI title="Sessions" value={analyticsSummary.sessions} accent="text-blue-400" />
+                <KPI title="Avg / Day" value={kpiAvgPerDay ? msToHMS(kpiAvgPerDay) : "0s"} accent="text-purple-400" />
+                <KPI title="Active Tasks" value={analyticsSummary.rows.filter(r=>r.totalTime>0).length} accent="text-amber-400" />
+              </div>
+            )}
 
             {/* Trend + Donut */}
-            <div className="grid lg:grid-cols-3 gap-6 mb-6">
-              <div className="lg:col-span-2">
-                <PanelTitle title="Time Trend" subtitle={`${analyticsWindow.start.toLocaleDateString()} → ${analyticsWindow.end.toLocaleDateString()}`} />
-                <AreaTrend data={analyticsSummary.days} height={180} />
+            {(analyticsSections.trend || analyticsSections.donut) && (
+              <div className="grid lg:grid-cols-3 gap-6 mb-6">
+                {analyticsSections.trend && (
+                  <div className="lg:col-span-2">
+                    <PanelTitle title="Time Trend" subtitle={`${analyticsWindow.start.toLocaleDateString()} → ${analyticsWindow.end.toLocaleDateString()}`} />
+                    <AreaTrend data={analyticsSummary.days} height={180} />
+                  </div>
+                )}
+                {analyticsSections.donut && (
+                  <div>
+                    <PanelTitle title="Task Share" subtitle="Top 8 tasks" />
+                    <Donut data={analyticsSummary.share} />
+                    <Legend data={analyticsSummary.share} />
+                  </div>
+                )}
               </div>
-              <div>
-                <PanelTitle title="Task Share" subtitle="Top 8 tasks" />
-                <Donut data={analyticsSummary.share} />
-                <Legend data={analyticsSummary.share} />
-              </div>
-            </div>
+            )}
 
             {/* Heatmap + Distributions */}
-            <div className="grid lg:grid-cols-3 gap-6 mb-6">
-              <div className="lg:col-span-2">
-                <PanelTitle title="Calendar Heatmap" subtitle="Intensity = time spent per day" />
-                <CalendarHeatmap data={analyticsSummary.days} window={analyticsWindow} />
+            {(analyticsSections.heatmap || analyticsSections.distributions) && (
+              <div className="grid lg:grid-cols-3 gap-6 mb-6">
+                {analyticsSections.heatmap && (
+                  <div className="lg:col-span-2">
+                    <PanelTitle title="Calendar Heatmap" subtitle="Intensity = time spent per day" />
+                    <CalendarHeatmap data={analyticsSummary.days} window={analyticsWindow} />
+                  </div>
+                )}
+                {analyticsSections.distributions && (
+                  <div className="grid gap-6">
+                    <div className="">
+                      <PanelTitle title="By Hour of Day" subtitle="When you’re most active" />
+                      <BarsHorizontal labels={Array.from({length:24},(_,i)=>`${i}:00`)} values={analyticsSummary.hour} />
+                    </div>
+                    <div className="">
+                      <PanelTitle title="By Day of Week" subtitle="Workload distribution" />
+                      <BarsHorizontal labels={["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]} values={analyticsSummary.wday} />
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="grid gap-6">
-                <div className="">
-                  <PanelTitle title="By Hour of Day" subtitle="When you’re most active" />
-                  <BarsHorizontal labels={Array.from({length:24},(_,i)=>`${i}:00`)} values={analyticsSummary.hour} />
-                </div>
-                <div className="">
-                  <PanelTitle title="By Day of Week" subtitle="Workload distribution" />
-                  <BarsHorizontal labels={["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]} values={analyticsSummary.wday} />
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Top Tasks Table */}
-            <div className="mb-6">
-              <PanelTitle title="Top Tasks" subtitle="Sorted by total time" />
-              <TopTasksTable rows={analyticsSummary.rows
-                .filter(r=>r.totalTime>0)
-                .sort((a,b)=>b.totalTime-a.totalTime)
-                .slice(0,12)}
-              />
-            </div>
+            {analyticsSections.top && (
+              <div className="mb-6">
+                <PanelTitle title="Top Tasks" subtitle="Sorted by total time" />
+                <TopTasksTable rows={analyticsSummary.rows
+                  .filter(r=>r.totalTime>0)
+                  .sort((a,b)=>b.totalTime-a.totalTime)
+                  .slice(0,12)}
+                />
+              </div>
+            )}
 
             {/* Sessions Explorer */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <PanelTitle title="Sessions Explorer" subtitle="Filter & export" tight />
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-2 py-1 bg-white/5 border border-white/10 rounded">
-                    <Search className="w-4 h-4 text-slate-300/80" />
-                    <input value={sessionFilterQuery} onChange={e=>setSessionFilterQuery(e.target.value)} placeholder="Search in task path / note"
-                           className="bg-transparent outline-none text-slate-100 text-sm"/>
+            {analyticsSections.sessions && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <PanelTitle title="Sessions Explorer" subtitle="Filter & export" tight />
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-2 py-1 bg-white/5 border border-white/10 rounded">
+                      <Search className="w-4 h-4 text-slate-300/80" />
+                      <input value={sessionFilterQuery} onChange={e=>setSessionFilterQuery(e.target.value)} placeholder="Search in task path / note"
+                             className="bg-transparent outline-none text-slate-100 text-sm"/>
+                    </div>
+                    <button onClick={exportAnalyticsCSV} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200 text-sm flex items-center gap-2">
+                      <Download className="w-4 h-4" /> CSV
+                    </button>
                   </div>
-                  <button onClick={exportAnalyticsCSV} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-200 text-sm flex items-center gap-2">
-                    <Download className="w-4 h-4" /> CSV
-                  </button>
                 </div>
+                <SessionsTable rows={analyticsSummary.sessionsFlat} query={sessionFilterQuery} />
               </div>
-              <SessionsTable rows={analyticsSummary.sessionsFlat} query={sessionFilterQuery} />
-            </div>
+            )}
           </div>
         )}
 
@@ -957,7 +1040,7 @@ export default function TasksPage() {
             <div className="text-center py-12">
               <Timer className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <p className="text-gray-400 text-lg mb-2">No tasks yet</p>
-              <p className="text-gray-500">Create your first task to start tracking time</p>
+              <p className="text-gray-500">Use <span className="text-slate-200 font-medium">Add Task</span> above to create your first task.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1027,7 +1110,7 @@ function TaskPicker({ items, selected, onChange }) {
 
 /* --- Area Trend (SVG) --- */
 function AreaTrend({ data, height = 160 }) {
-  const w = 700; // responsive-ish via container; SVG will scale with width:100%
+  const w = 700; // SVG scales with width:100%
   const padding = 24;
   const maxV = Math.max(1, ...data.map(d => d.value));
   const points = data.map((d, i) => {
@@ -1044,7 +1127,7 @@ function AreaTrend({ data, height = 160 }) {
 
   return (
     <div className="w-full rounded-lg border border-white/10 bg-white/5 p-3">
-      <svg viewBox={`0 0 ${w} ${height}`} className="w-full h-[${height}px]">
+      <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }}>
         {/* axes */}
         <line x1={padding} y1={height - padding} x2={w - padding} y2={height - padding} stroke="currentColor" opacity="0.2"/>
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity="0.2"/>
@@ -1053,9 +1136,7 @@ function AreaTrend({ data, height = 160 }) {
         {/* stroke */}
         <path d={path} stroke="currentColor" strokeWidth="2" fill="none" />
         {/* points */}
-        {points.map(([x,y],i)=>(
-          <circle key={i} cx={x} cy={y} r="2.5" fill="currentColor" />
-        ))}
+        {points.map(([x,y],i)=>(<circle key={i} cx={x} cy={y} r="2.5" fill="currentColor" />))}
       </svg>
       <div className="flex justify-between text-[10px] text-slate-400 mt-1">
         <span>{data[0]?.date || "-"}</span>
