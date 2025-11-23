@@ -20,7 +20,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Calendar, Download, Upload, TrendingUp, Clock, Award, BarChart3, Zap, Target } from 'lucide-react';
+import { Calendar, Download, Upload, TrendingUp, Clock, Award, BarChart3, Zap, Target, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ============= DRAGGABLE COMPONENTS =============
 const SimpleDraggable = ({ id, children, disabled = false }) => {
@@ -70,7 +70,286 @@ const DroppableZone = ({ id, children, className = '' }) => {
   );
 };
 
-// ============= ANALYTICS PAGE =============
+// ============= CALENDAR PAGE =============
+const CalendarPage = ({ calendarBlocks, onUpdateBlocks, onBack, dailyHabits, newTasks }) => {
+  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [blockForm, setBlockForm] = useState({ startHour: 9, duration: 1, title: '', description: '' });
+
+  const timeSlots = Array.from({ length: 24 }, (_, i) => i);
+  
+  const getWeekDates = () => {
+    const week = [];
+    const curr = new Date(currentWeek);
+    const first = curr.getDate() - curr.getDay();
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(curr.setDate(first + i));
+      week.push(date);
+    }
+    return week;
+  };
+
+  const weekDates = getWeekDates();
+
+  const formatDate = (date) => date.toISOString().split('T')[0];
+  
+  const getBlocksForSlot = (date, hour) => {
+    const dateStr = formatDate(date);
+    return (calendarBlocks[dateStr] || []).filter(block => {
+      const blockStart = block.startHour;
+      const blockEnd = block.startHour + block.duration;
+      return hour >= blockStart && hour < blockEnd;
+    });
+  };
+
+  const addBlock = () => {
+    if (!selectedSlot || !blockForm.title.trim()) return;
+    
+    const dateStr = formatDate(selectedSlot.date);
+    const newBlock = {
+      id: `block_${Date.now()}`,
+      ...blockForm,
+      startHour: selectedSlot.hour,
+      createdAt: new Date().toISOString(),
+      tasks: []
+    };
+
+    const updated = { ...calendarBlocks };
+    if (!updated[dateStr]) updated[dateStr] = [];
+    updated[dateStr].push(newBlock);
+    
+    onUpdateBlocks(updated);
+    setShowBlockModal(false);
+    setBlockForm({ startHour: 9, duration: 1, title: '', description: '' });
+    setSelectedSlot(null);
+  };
+
+  const deleteBlock = (date, blockId) => {
+    const dateStr = formatDate(date);
+    const updated = { ...calendarBlocks };
+    if (updated[dateStr]) {
+      updated[dateStr] = updated[dateStr].filter(b => b.id !== blockId);
+      if (updated[dateStr].length === 0) delete updated[dateStr];
+    }
+    onUpdateBlocks(updated);
+  };
+
+  const removeTaskFromBlock = (date, blockId, taskId) => {
+    const dateStr = formatDate(date);
+    const updated = { ...calendarBlocks };
+    if (updated[dateStr]) {
+      updated[dateStr] = updated[dateStr].map(b => {
+        if (b.id === blockId) {
+          return { ...b, tasks: (b.tasks || []).filter(t => t.id !== taskId) };
+        }
+        return b;
+      });
+    }
+    onUpdateBlocks(updated);
+  };
+
+  const navigateWeek = (direction) => {
+    const newWeek = new Date(currentWeek);
+    newWeek.setDate(newWeek.getDate() + (direction * 7));
+    setCurrentWeek(newWeek);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0a132e] text-white p-6 overflow-x-auto">
+      <style jsx>{`
+        .blueprint-bg {
+          background-image:
+            repeating-linear-gradient(0deg, rgba(56,189,248,0.08) 0px, rgba(56,189,248,0.08) 1px, transparent 1px, transparent 22px),
+            repeating-linear-gradient(90deg, rgba(56,189,248,0.08) 0px, rgba(56,189,248,0.08) 1px, transparent 1px, transparent 22px);
+        }
+      `}</style>
+
+      <div className="absolute inset-0 blueprint-bg opacity-20 pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(800px_400px_at_50%_-10%,rgba(56,189,248,0.08),transparent_60%)] pointer-events-none" />
+
+      <div className="relative max-w-[1800px] mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center gap-4">
+            <button onClick={onBack} className="px-4 py-2 border border-white/10 bg-white/5 hover:bg-white/10 rounded transition-colors text-slate-200">
+              ← Back
+            </button>
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="h-px w-8 bg-gradient-to-r from-transparent to-cyan-400/40" />
+                <span className="text-[10px] tracking-widest text-cyan-300/70 uppercase">Time Block Planning</span>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black text-slate-100">Calendar View</h1>
+            </div>
+          </div>
+          <div className="flex gap-3 items-center">
+            <button onClick={() => navigateWeek(-1)} className="p-2 border border-white/10 bg-white/5 hover:bg-white/10 rounded transition-colors">
+              <ChevronLeft size={20} />
+            </button>
+            <span className="text-slate-300 font-medium">
+              {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+            <button onClick={() => navigateWeek(1)} className="p-2 border border-white/10 bg-white/5 hover:bg-white/10 rounded transition-colors">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="min-w-[1400px]">
+          <div className="grid grid-cols-8 gap-2 mb-6">
+            <div className="border border-white/10 bg-white/5 p-4">
+              <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-3">Time</h3>
+            </div>
+            {weekDates.map((date, idx) => (
+              <div key={idx} className={`border border-white/10 bg-white/5 p-4 ${date.getDay() === 0 || date.getDay() === 6 ? 'bg-cyan-400/5' : ''}`}>
+                <div className="text-center">
+                  <div className="text-xs text-slate-400 uppercase tracking-wider">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                  <div className="text-lg font-black text-slate-100">{date.getDate()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-8 gap-2 auto-rows-auto">
+            {timeSlots.map((hour) => (
+              <React.Fragment key={hour}>
+                <div className="border border-white/10 bg-white/5 p-2 flex items-center justify-center h-[80px]">
+                  <span className="text-xs text-slate-400 font-mono">{hour.toString().padStart(2, '0')}:00</span>
+                </div>
+                {weekDates.map((date, dayIdx) => {
+                  const blocks = getBlocksForSlot(date, hour);
+                  const isFirstSlot = blocks.length > 0 && blocks[0].startHour === hour;
+                  const dateStr = formatDate(date);
+                  
+                  return (
+                    <DroppableZone
+                      key={`${dateStr}-${hour}`}
+                      id={`slot-${dateStr}-${hour}`}
+                      className={`border border-white/10 h-[80px] relative ${date.getDay() === 0 || date.getDay() === 6 ? 'bg-cyan-400/5' : 'bg-white/5'} hover:bg-cyan-400/10 transition-all cursor-pointer`}
+                    >
+                      {blocks.length === 0 ? (
+                        <div 
+                          onClick={() => {
+                            setSelectedSlot({ date, hour });
+                            setShowBlockModal(true);
+                          }}
+                          className="w-full h-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                        >
+                          <span className="text-cyan-400 text-xs">+</span>
+                        </div>
+                      ) : isFirstSlot ? (
+                        <div
+                          className="absolute inset-0 border-2 border-cyan-400/60 bg-cyan-400/10 p-2 z-10 overflow-hidden"
+                          style={{ height: `${blocks[0].duration * 80}px` }}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <h4 className="font-bold text-xs text-slate-100 truncate pr-2">{blocks[0].title}</h4>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteBlock(date, blocks[0].id);
+                              }}
+                              className="text-slate-400 hover:text-cyan-300 text-sm flex-shrink-0"
+                            >
+                              ×
+                            </button>
+                          </div>
+                          {blocks[0].description && (
+                            <p className="text-[10px] text-slate-400 mb-2 line-clamp-2">{blocks[0].description}</p>
+                          )}
+                          <div className="space-y-1 mt-2 max-h-[calc(100%-50px)] overflow-y-auto">
+                            {(blocks[0].tasks || []).map((task) => (
+                              <div key={task.id} className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-[10px]">
+                                <span className="text-slate-300 truncate flex-1">{task.name}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeTaskFromBlock(date, blocks[0].id, task.id);
+                                  }}
+                                  className="text-slate-400 hover:text-cyan-300 ml-1 flex-shrink-0"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </DroppableZone>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {showBlockModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="w-full max-w-md border border-white/10 bg-[#0b1431] p-6">
+            <h3 className="text-xl font-black text-slate-100 mb-4">Create Time Block</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Title</label>
+                <input
+                  type="text"
+                  value={blockForm.title}
+                  onChange={(e) => setBlockForm({ ...blockForm, title: e.target.value })}
+                  onKeyPress={(e) => e.key === 'Enter' && addBlock()}
+                  className="w-full p-3 border border-white/10 bg-[#0f1a3d] focus:border-cyan-400/50 focus:outline-none text-white"
+                  placeholder="e.g., Deep Work, Exercise"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Description (Optional)</label>
+                <textarea
+                  value={blockForm.description}
+                  onChange={(e) => setBlockForm({ ...blockForm, description: e.target.value })}
+                  className="w-full p-3 border border-white/10 bg-[#0f1a3d] focus:border-cyan-400/50 focus:outline-none text-white h-20 resize-none"
+                  placeholder="Details about this time block..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Duration (hours)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={blockForm.duration}
+                  onChange={(e) => setBlockForm({ ...blockForm, duration: Math.max(1, Math.min(12, Number(e.target.value))) })}
+                  className="w-full p-3 border border-white/10 bg-[#0f1a3d] focus:border-cyan-400/50 focus:outline-none text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => { setShowBlockModal(false); setSelectedSlot(null); setBlockForm({ startHour: 9, duration: 1, title: '', description: '' }); }}
+                className="px-4 py-2 border border-white/20 bg-white/5 hover:bg-white/10 text-sm uppercase tracking-wider transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addBlock}
+                disabled={!blockForm.title.trim()}
+                className="px-4 py-2 border border-cyan-400/50 bg-cyan-400/10 hover:bg-cyan-400/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm uppercase tracking-wider transition-colors"
+              >
+                Create Block
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============= ANALYTICS PAGE (keeping original) =============
 const AnalyticsPage = ({ analyticsData, onBack, onImport, onExport, onClearData }) => {
   const [viewMode, setViewMode] = useState('overview');
 
@@ -123,7 +402,6 @@ const AnalyticsPage = ({ analyticsData, onBack, onImport, onExport, onClearData 
       `}</style>
 
       <div className="absolute inset-0 blueprint-bg opacity-20 pointer-events-none" />
-      {/* Removed yellow (amber) glow, keep subtle cyan */}
       <div className="absolute inset-0 bg-[radial-gradient(800px_400px_at_50%_-10%,rgba(56,189,248,0.08),transparent_60%)] pointer-events-none" />
 
       <div className="relative max-w-7xl mx-auto">
@@ -356,6 +634,7 @@ const Page = () => {
   const [focusMode, setFocusMode] = useState(false);
   const [analyticsData, setAnalyticsData] = useState([]);
   const [popupWindow, setPopupWindow] = useState(null);
+  const [calendarBlocks, setCalendarBlocks] = useState({});
 
   const [taskTime, setTaskTime] = useState(25);
   const [breakTime, setBreakTime] = useState('none');
@@ -377,7 +656,7 @@ const Page = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Global darkening for native selects/options (best-effort across browsers)
+  // Global darkening for native selects/options
   useEffect(() => {
     const style = document.createElement('style');
     style.id = 'native-dark-select';
@@ -402,11 +681,17 @@ const Page = () => {
     loadSavedTasks();
     const savedAnalytics = JSON.parse(localStorage.getItem('speedTasksAnalytics') || '[]');
     setAnalyticsData(savedAnalytics);
+    const savedCalendar = JSON.parse(localStorage.getItem('speedTasksCalendar') || '{}');
+    setCalendarBlocks(savedCalendar);
   }, []);
 
   useEffect(() => {
     localStorage.setItem('speedTasksAnalytics', JSON.stringify(analyticsData));
   }, [analyticsData]);
+
+  useEffect(() => {
+    localStorage.setItem('speedTasksCalendar', JSON.stringify(calendarBlocks));
+  }, [calendarBlocks]);
 
   useEffect(() => {
     if (timerState === 'running') {
@@ -542,9 +827,8 @@ const Page = () => {
 
   const showCelebrationAnimation = () => { setShowCelebration(true); setTimeout(() => setShowCelebration(false), 1600); };
 
-  // ============= POPUP (fixed to same-origin) =============
+  // ============= POPUP =============
   const openTaskPopup = () => {
-    // Reuse if already open
     if (popupWindow && !popupWindow.closed) { popupWindow.focus(); return; }
 
     const currentTask = todaysTasks[currentTaskIndex];
@@ -624,7 +908,7 @@ const Page = () => {
     `.trim();
 
     const popup = window.open('', 'taskTimer', 'width=320,height=360,resizable=no,scrollbars=no,status=no,menubar=no,toolbar=no,location=no');
-    if (!popup) return; // likely blocked
+    if (!popup) return;
     try {
       popup.document.open();
       popup.document.write(popupHtml);
@@ -668,6 +952,44 @@ const Page = () => {
     const currentDraggedItem = draggedItem;
     setDraggedItem(null);
     if (!over || !currentDraggedItem) return;
+
+    // Check if dropping on calendar slot
+    if (over.id.startsWith('slot-')) {
+      const [, dateStr, hourStr] = over.id.split('-');
+      const hour = parseInt(hourStr, 10);
+      const date = new Date(dateStr);
+      
+      if (currentDraggedItem.sourceType === 'habit' || currentDraggedItem.sourceType === 'newTask') {
+        const taskToAdd = {
+          id: `task_${Date.now()}`,
+          name: currentDraggedItem.name,
+          description: currentDraggedItem.description || '',
+          type: currentDraggedItem.sourceType === 'habit' ? 'habit' : 'task'
+        };
+        
+        // Find the block at this slot
+        const blocks = (calendarBlocks[dateStr] || []).filter(block => {
+          return hour >= block.startHour && hour < block.startHour + block.duration;
+        });
+        
+        if (blocks.length > 0) {
+          const updated = { ...calendarBlocks };
+          updated[dateStr] = updated[dateStr].map(b => {
+            if (b.id === blocks[0].id) {
+              return { ...b, tasks: [...(b.tasks || []), taskToAdd] };
+            }
+            return b;
+          });
+          setCalendarBlocks(updated);
+          
+          // Remove from new tasks if it was dragged from there
+          if (currentDraggedItem.sourceType === 'newTask') {
+            setNewTasks(prev => prev.filter(t => t.id !== active.id));
+          }
+        }
+      }
+      return;
+    }
 
     if (over.id === 'todays-tasks-zone') {
       if (currentDraggedItem.sourceType === 'habit') {
@@ -827,6 +1149,18 @@ const Page = () => {
     );
   }
 
+  if (currentPage === 'calendar') {
+    return (
+      <CalendarPage
+        calendarBlocks={calendarBlocks}
+        onUpdateBlocks={setCalendarBlocks}
+        onBack={() => setCurrentPage('tasks')}
+        dailyHabits={dailyHabits}
+        newTasks={newTasks}
+      />
+    );
+  }
+
   // ============= LOADING =============
   if (loading) {
     return (
@@ -857,7 +1191,6 @@ const Page = () => {
         `}</style>
 
         <div className="absolute inset-0 blueprint-bg opacity-20 pointer-events-none" />
-        {/* Removed amber radial; keep cyan only */}
         <div className="absolute inset-0 bg-[radial-gradient(1200px_500px_at_65%_-10%,rgba(56,189,248,0.12),transparent_60%)] pointer-events-none" />
 
         <div className="relative max-w-7xl mx-auto">
@@ -874,7 +1207,6 @@ const Page = () => {
               <div>
                 <h1 className="text-4xl md:text-5xl font-black text-slate-100 mb-2">
                   <span className="block">Lightning Speed</span>
-                  {/* removed yellow highlight */}
                   <span className="block text-cyan-300">Task Execution</span>
                 </h1>
                 <p className="text-slate-300/80 text-sm max-w-2xl">
@@ -883,6 +1215,13 @@ const Page = () => {
               </div>
 
               <div className="flex gap-3">
+                <button
+                  onClick={() => setCurrentPage('calendar')}
+                  className="px-4 py-3 border border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 transition-colors flex items-center gap-2"
+                >
+                  <Calendar size={16} />
+                  <span className="text-xs uppercase tracking-wider">Calendar</span>
+                </button>
                 <button
                   onClick={() => setCurrentPage('analytics')}
                   className="px-4 py-3 border border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 transition-colors flex items-center gap-2"
@@ -1163,14 +1502,14 @@ const Page = () => {
 
         {/* Celebration Overlay */}
         {showCelebration && (
-          <div className="fixed inset-0 pointer-events-none flex items-center justify-center">
+          <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-50">
             <div className="bg-cyan-300/10 border border-cyan-300/30 text-cyan-200 px-6 py-4 text-xl font-black animate-pulse">
               Mission Complete! ⚡
             </div>
           </div>
         )}
 
-        {/* Time Modal (dark select fixed) */}
+        {/* Time Modal */}
         {showTimeModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="w-full max-w-md border border-white/10 bg-[#0b1431] p-6">
@@ -1204,7 +1543,6 @@ const Page = () => {
                       <option value="15">15 min</option>
                       <option value="custom">Custom…</option>
                     </select>
-                    {/* custom chevron */}
                     <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" width="16" height="16" viewBox="0 0 24 24" fill="none">
                       <path d="M7 10l5 5 5-5" stroke="#a5b4fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
