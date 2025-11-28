@@ -1,22 +1,26 @@
+// app/habits/page.js
 "use client";
+
 import { useState, useEffect } from "react";
 import { Plus, Trash, Edit, LogOut, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export default function CreateHabit() {
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export default function HabitsPage() {
   const router = useRouter();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  // In CreateHabit.js, update habitData state
-const [habitData, setHabitData] = useState({
-  name: "",
-  category: "",
-  emoji: "",
-  maxCheckOffs: 1,
-  color: "#10B981",
-  completedDates: [],
-  xpPerCompletion: 50, // Default XP value
-});
 
+  const [habitData, setHabitData] = useState({
+    name: "",
+    category: "",
+    emoji: "",
+    maxCheckOffs: 1,
+    color: "#10B981",
+    completedDates: [],
+    xpPerCompletion: 50,
+    daysOfWeek: [true, true, true, true, true, true, true],
+  });
 
   const [habits, setHabits] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -32,8 +36,18 @@ const [habitData, setHabitData] = useState({
   ];
 
   const commonEmojis = [
-    "💪", "🏃", "🧘", "📚", "💻", "🎨",
-    "🎵", "🌱", "💭", "💡", "✍️", "🎯",
+    "💪",
+    "🏃",
+    "🧘",
+    "📚",
+    "💻",
+    "🎨",
+    "🎵",
+    "🌱",
+    "💭",
+    "💡",
+    "✍️",
+    "🎯",
   ];
 
   const predefinedColors = [
@@ -51,9 +65,7 @@ const [habitData, setHabitData] = useState({
 
   const fetchHabits = async () => {
     try {
-      const response = await fetch("/api/habits", {
-        credentials: "include",
-      });
+      const response = await fetch("/api/habits", { credentials: "include" });
       const data = await response.json();
       if (response.ok) {
         setHabits(data);
@@ -78,7 +90,7 @@ const [habitData, setHabitData] = useState({
         }),
       });
 
-      const data = await response.json();
+      await response.json();
 
       if (response.ok) {
         setHabitData({
@@ -88,6 +100,8 @@ const [habitData, setHabitData] = useState({
           maxCheckOffs: 1,
           color: "#10B981",
           completedDates: [],
+          xpPerCompletion: 50,
+          daysOfWeek: [true, true, true, true, true, true, true],
         });
         setIsEditing(null);
         await fetchHabits();
@@ -104,8 +118,13 @@ const [habitData, setHabitData] = useState({
       category: habit.category,
       emoji: habit.emoji,
       maxCheckOffs: habit.maxCheckOffs,
-      color: habit.color,
-      completedDates: habit.completedDates,
+      color: habit.color || "#10B981",
+      completedDates: habit.completedDates || [],
+      xpPerCompletion: habit.xpPerCompletion || 50,
+      daysOfWeek:
+        Array.isArray(habit.daysOfWeek) && habit.daysOfWeek.length === 7
+          ? habit.daysOfWeek
+          : [true, true, true, true, true, true, true],
     });
     setIsEditing(habit._id);
   };
@@ -126,22 +145,22 @@ const [habitData, setHabitData] = useState({
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
       });
       if (response.ok) {
-        router.push('/login');
+        router.push("/login");
       }
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error("Logout failed:", error);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 p-4">
-        
       <div className="max-w-md mx-auto">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Plus className="h-6 w-6 text-blue-400" />
@@ -149,7 +168,7 @@ const [habitData, setHabitData] = useState({
               {isEditing ? "Edit Habit" : "Create New Habit"}
             </h1>
           </div>
-          
+
           <button
             onClick={() => setShowMobileMenu(!showMobileMenu)}
             className="md:hidden p-2 text-gray-300 hover:text-white"
@@ -178,7 +197,9 @@ const [habitData, setHabitData] = useState({
           </div>
         )}
 
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Name + Emoji */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-200">
               Habit Name & Icon
@@ -194,7 +215,9 @@ const [habitData, setHabitData] = useState({
               <input
                 type="text"
                 value={habitData.name}
-                onChange={(e) => setHabitData({ ...habitData, name: e.target.value })}
+                onChange={(e) =>
+                  setHabitData({ ...habitData, name: e.target.value })
+                }
                 className="flex-1 p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
                 placeholder="Enter habit name"
                 required
@@ -220,13 +243,16 @@ const [habitData, setHabitData] = useState({
             )}
           </div>
 
+          {/* Category */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-200">
               Category
             </label>
             <select
               value={habitData.category}
-              onChange={(e) => setHabitData({ ...habitData, category: e.target.value })}
+              onChange={(e) =>
+                setHabitData({ ...habitData, category: e.target.value })
+              }
               className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
               required
             >
@@ -239,6 +265,7 @@ const [habitData, setHabitData] = useState({
             </select>
           </div>
 
+          {/* Daily check-offs */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-200">
               Daily Check-offs Required
@@ -248,34 +275,74 @@ const [habitData, setHabitData] = useState({
               min="1"
               max="10"
               value={habitData.maxCheckOffs}
-              onChange={(e) => setHabitData({
-                ...habitData,
-                maxCheckOffs: parseInt(e.target.value),
-              })}
+              onChange={(e) =>
+                setHabitData({
+                  ...habitData,
+                  maxCheckOffs: parseInt(e.target.value, 10),
+                })
+              }
               className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
               required
             />
           </div>
+
+          {/* XP per completion */}
           <div className="space-y-2">
-  <label className="block text-sm font-medium text-gray-200">
-    XP Per Completion
-  </label>
-  <input
-    type="number"
-    min="10"
-    max="1000"
-    value={habitData.xpPerCompletion}
-    onChange={(e) => setHabitData({
-      ...habitData,
-      xpPerCompletion: parseInt(e.target.value),
-    })}
-    className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
-    required
-  />
-  <p className="text-xs text-gray-400">Amount of XP earned each time this habit is completed</p>
-</div>
+            <label className="block text-sm font-medium text-gray-200">
+              XP Per Completion
+            </label>
+            <input
+              type="number"
+              min="10"
+              max="1000"
+              value={habitData.xpPerCompletion}
+              onChange={(e) =>
+                setHabitData({
+                  ...habitData,
+                  xpPerCompletion: parseInt(e.target.value, 10),
+                })
+              }
+              className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
+              required
+            />
+            <p className="text-xs text-gray-400">
+              Amount of XP earned each time this habit is completed
+            </p>
+          </div>
 
+          {/* Days of week selection */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-200">
+              Days to Show This Habit
+            </label>
+            <div className="grid grid-cols-7 gap-1">
+              {DAYS.map((day, idx) => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() =>
+                    setHabitData((prev) => {
+                      const nextDays = [...prev.daysOfWeek];
+                      nextDays[idx] = !nextDays[idx];
+                      return { ...prev, daysOfWeek: nextDays };
+                    })
+                  }
+                  className={`py-2 rounded-lg text-xs border transition-all ${
+                    habitData.daysOfWeek[idx]
+                      ? "bg-blue-600 text-white border-blue-500"
+                      : "bg-gray-800 text-gray-300 border-gray-700"
+                  }`}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400">
+              Only these days will show this habit in your weekly view.
+            </p>
+          </div>
 
+          {/* Color theme */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-200">
               Color Theme
@@ -287,7 +354,9 @@ const [habitData, setHabitData] = useState({
                   type="button"
                   onClick={() => setHabitData({ ...habitData, color })}
                   className={`w-full aspect-square rounded-lg border-2 transition-transform hover:scale-110 ${
-                    habitData.color === color ? "border-white" : "border-transparent"
+                    habitData.color === color
+                      ? "border-white"
+                      : "border-transparent"
                   }`}
                   style={{ backgroundColor: color }}
                 />
@@ -303,16 +372,41 @@ const [habitData, setHabitData] = useState({
           </button>
         </form>
 
+        {/* List of habits */}
         <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-100 mb-4">Your Habits</h2>
           {habits.map((habit) => (
             <div
               key={habit._id}
               className="flex items-center justify-between p-4 bg-gray-800 rounded-lg mb-2"
+              style={{
+                borderLeft: `4px solid ${habit.color || "#10B981"}`,
+              }}
             >
-              <div className="flex items-center gap-2">
-                <span>{habit.emoji}</span>
-                <span className="text-gray-100">{habit.name}</span>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{habit.emoji}</span>
+                  <span className="text-gray-100 font-medium">
+                    {habit.name}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1 text-[10px]">
+                  {(Array.isArray(habit.daysOfWeek) &&
+                  habit.daysOfWeek.length === 7
+                    ? habit.daysOfWeek
+                    : [true, true, true, true, true, true, true]
+                  ).map(
+                    (on, idx) =>
+                      on && (
+                        <span
+                          key={DAYS[idx]}
+                          className="px-2 py-0.5 rounded-full bg-gray-900 text-gray-200 border border-gray-700"
+                        >
+                          {DAYS[idx]}
+                        </span>
+                      )
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
                 <button

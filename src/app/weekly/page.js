@@ -1,3 +1,4 @@
+// app/progress/page.js
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -107,8 +108,8 @@ export default function WeeklyView() {
     open: false,
     habit: null,
     monthCursor: todayLocal(),
-    selectedKey: null,     // the date user picked in calendar (actual done date)
-    cellContextKey: null,  // the week cell date key they clicked (the one to tick)
+    selectedKey: null, // the date user picked in calendar (actual done date)
+    cellContextKey: null, // the week cell date key they clicked (the one to tick)
     saving: false,
   });
 
@@ -152,6 +153,10 @@ export default function WeeklyView() {
         completedDates: Array.isArray(h.completedDates)
           ? h.completedDates.map(toLocalDayKey)
           : [],
+        daysOfWeek:
+          Array.isArray(h.daysOfWeek) && h.daysOfWeek.length === 7
+            ? h.daysOfWeek
+            : [true, true, true, true, true, true, true],
       }));
       setHabits(normalized);
       setCategoryFilters([
@@ -160,6 +165,33 @@ export default function WeeklyView() {
     } catch (e) {
       console.error("Error fetching habits:", e);
     }
+  };
+
+  /* helpers */
+  const completionsOn = (habit, date) => {
+    const key = dateKeyLocalFromDate(date);
+    return (habit.completedDates || []).filter((k) => k === key).length || 0;
+  };
+
+  const isHabitCompleted = (habit, date) => {
+    const count = completionsOn(habit, date);
+    return isCounterMode ? count > 0 : count >= (habit.maxCheckOffs || 1);
+  };
+
+  const getCompletionRatio = (habit, date) => {
+    const c = completionsOn(habit, date);
+    if (isCounterMode) return String(c);
+    return `${c}/${habit.maxCheckOffs || 1}`;
+  };
+
+  // NEW: is habit active on this date according to daysOfWeek
+  const isHabitActiveOnDate = (habit, date) => {
+    const idx = date.getDay(); // 0–6
+    const days =
+      Array.isArray(habit.daysOfWeek) && habit.daysOfWeek.length === 7
+        ? habit.daysOfWeek
+        : [true, true, true, true, true, true, true];
+    return !!days[idx];
   };
 
   /* stats */
@@ -176,17 +208,25 @@ export default function WeeklyView() {
 
     const dayStats = currentWeek.map((date) => {
       const key = dateKeyLocalFromDate(date);
-      const dayCompletions = list.reduce((acc, habit) => {
+      let dayCompletions = 0;
+      let possible = 0;
+
+      list.forEach((habit) => {
+        if (!isHabitActiveOnDate(habit, date)) return;
+
+        possible += 1;
         const count = (habit.completedDates || []).filter((k) => k === key).length;
         const ok = isCounterMode ? count > 0 : count >= (habit.maxCheckOffs || 1);
-        return ok ? acc + 1 : acc;
-      }, 0);
-      const possible = list.length;
+        if (ok) dayCompletions += 1;
+      });
+
+      const rate = possible ? (dayCompletions / possible) * 100 : 0;
+
       return {
         key,
         dayName: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()],
         completions: dayCompletions,
-        rate: possible ? (dayCompletions / possible) * 100 : 0,
+        rate,
       };
     });
 
@@ -194,7 +234,7 @@ export default function WeeklyView() {
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
 
-    const totalPossible = list.length * 7;
+    const totalPossible = dayStats.reduce((sum, d) => sum + (d.rate > 0 || d.completions > 0 ? 1 : 0), 0) * list.length || 0; 
     const total = dayStats.reduce((s, d) => s + d.completions, 0);
     const rate = totalPossible ? (total / totalPossible) * 100 : 0;
 
@@ -206,7 +246,6 @@ export default function WeeklyView() {
     });
   };
 
-  /* helpers */
   const sortHabits = (list) => {
     return [...list].sort((a, b) => {
       let c = 0;
@@ -214,8 +253,12 @@ export default function WeeklyView() {
       else if (sortBy === "category")
         c = (a.category || "").localeCompare(b.category || "");
       else if (sortBy === "completion") {
-        const aC = currentWeek.filter((d) => isHabitCompleted(a, d)).length;
-        const bC = currentWeek.filter((d) => isHabitCompleted(b, d)).length;
+        const aC = currentWeek.filter(
+          (d) => isHabitActiveOnDate(a, d) && isHabitCompleted(a, d)
+        ).length;
+        const bC = currentWeek.filter(
+          (d) => isHabitActiveOnDate(b, d) && isHabitCompleted(b, d)
+        ).length;
         c = aC - bC;
       }
       return sortDirection === "asc" ? c : -c;
@@ -236,22 +279,6 @@ export default function WeeklyView() {
     );
   };
 
-  const completionsOn = (habit, date) => {
-    const key = dateKeyLocalFromDate(date);
-    return (habit.completedDates || []).filter((k) => k === key).length || 0;
-  };
-
-  const isHabitCompleted = (habit, date) => {
-    const count = completionsOn(habit, date);
-    return isCounterMode ? count > 0 : count >= (habit.maxCheckOffs || 1);
-  };
-
-  const getCompletionRatio = (habit, date) => {
-    const c = completionsOn(habit, date);
-    if (isCounterMode) return String(c);
-    return `${c}/${habit.maxCheckOffs || 1}`;
-  };
-
   const saveHabit = async (habitId, update) => {
     await fetch("/api/habits", {
       method: "PUT",
@@ -263,6 +290,10 @@ export default function WeeklyView() {
   /* threshold toggle (disabled in Dates mode; in Dates mode we open editor) */
   const toggleHabit = async (habit, date) => {
     if (isCounterMode) return;
+
+    // respect daysOfWeek: do nothing if habit is off on this day
+    if (!isHabitActiveOnDate(habit, date)) return;
+
     const cellKey = dateKeyLocalFromDate(date);
 
     if (isDatesMode) {
@@ -290,7 +321,9 @@ export default function WeeklyView() {
       newList = [...arr, cellKey];
     }
 
-    setHabits((prev) => prev.map((h) => (h._id === habit._id ? { ...h, completedDates: newList } : h)));
+    setHabits((prev) =>
+      prev.map((h) => (h._id === habit._id ? { ...h, completedDates: newList } : h))
+    );
     try {
       await saveHabit(habit._id, { completedDates: newList });
     } catch (e) {
@@ -301,6 +334,8 @@ export default function WeeklyView() {
   /* counter mode adjust */
   const adjustCounter = async (habit, date, delta) => {
     if (!isCounterMode) return;
+    if (!isHabitActiveOnDate(habit, date)) return;
+
     const key = dateKeyLocalFromDate(date);
     const arr = Array.isArray(habit.completedDates) ? [...habit.completedDates] : [];
     const current = arr.filter((k) => k === key).length;
@@ -320,7 +355,9 @@ export default function WeeklyView() {
       });
     }
 
-    setHabits((prev) => prev.map((h) => (h._id === habit._id ? { ...h, completedDates: newList } : h)));
+    setHabits((prev) =>
+      prev.map((h) => (h._id === habit._id ? { ...h, completedDates: newList } : h))
+    );
     try {
       await saveHabit(habit._id, { completedDates: newList });
     } catch (e) {
@@ -330,14 +367,13 @@ export default function WeeklyView() {
 
   /* ----------- DATES MODE: editor tied to clicked cell ----------- */
   const openDatesEditor = (habit, cellKey) => {
-    // default selection: today
     const base = todayLocal();
     setDatesModal({
       open: true,
       habit,
       monthCursor: new Date(base.getFullYear(), base.getMonth(), 1),
       selectedKey: dateKeyLocalFromDate(base),
-      cellContextKey: cellKey, // <- the cell to tick
+      cellContextKey: cellKey,
       saving: false,
     });
   };
@@ -374,39 +410,31 @@ export default function WeeklyView() {
     setDatesModal((s) => ({ ...s, selectedKey: key }));
   };
 
-  // Save rule (what you asked):
-  // - Tick the clicked CELL date (cellContextKey) in completedDates
-  // - Attach attribution: habitId + cellContextKey -> selectedKey
-  // - DO NOT tick the selectedKey date itself.
   const saveDateSelection = async () => {
     if (!datesModal.habit || !datesModal.cellContextKey || !datesModal.selectedKey) return;
     setDatesModal((s) => ({ ...s, saving: true }));
 
     const habitId = datesModal.habit._id;
-    const cellKey = datesModal.cellContextKey;      // the week cell that should be checked
-    const actualKey = datesModal.selectedKey;       // the date you did it on (e.g., Oct 14)
+    const cellKey = datesModal.cellContextKey;
+    const actualKey = datesModal.selectedKey;
 
-    // ensure cellKey in completedDates
     const list = Array.isArray(datesModal.habit.completedDates)
       ? [...datesModal.habit.completedDates]
       : [];
     const newList = list.includes(cellKey) ? list : [...list, cellKey];
 
-    // set attribution mapping for ONLY this cell
     setAttributions((prev) => {
       const next = { ...prev };
       const map = { ...(next[habitId] || {}) };
-      map[cellKey] = actualKey; // "Done on actualKey"
+      map[cellKey] = actualKey;
       next[habitId] = map;
       return next;
     });
 
-    // Update local habit
     setHabits((prev) =>
       prev.map((h) => (h._id === habitId ? { ...h, completedDates: newList } : h))
     );
 
-    // Save only completedDates to server (attribution is local-only)
     try {
       await saveHabit(habitId, { completedDates: newList });
     } catch (e) {
@@ -629,7 +657,9 @@ export default function WeeklyView() {
                         isToday ? "text-cyan-200" : "text-slate-300"
                       }`}
                     >
-                      {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][date.getDay()]}
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+                        date.getDay()
+                      ]}
                     </div>
                     <div
                       className={`text-xs ${
@@ -673,7 +703,8 @@ export default function WeeklyView() {
 
                     {currentWeek.map((date) => {
                       const cellKey = dateKeyLocalFromDate(date);
-                      const isCompleted = isHabitCompleted(habit, date);
+                      const isActive = isHabitActiveOnDate(habit, date);
+                      const isCompleted = isActive && isHabitCompleted(habit, date);
                       const count = completionsOn(habit, date);
                       const attrForCell =
                         attributions[habit._id]?.[cellKey] || null;
@@ -684,32 +715,38 @@ export default function WeeklyView() {
                           className="flex flex-col items-center justify-center gap-1"
                         >
                           {isCounterMode ? (
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => adjustCounter(habit, date, -1)}
-                                className="w-7 h-7 rounded bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center"
-                                title="Decrease"
-                              >
-                                <ChevronDown className="h-4 w-4 text-slate-300" />
-                              </button>
-                              <div
-                                className={`w-12 h-10 rounded-lg flex items-center justify-center text-sm font-semibold border ${
-                                  count > 0
-                                    ? "bg-emerald-600/90 text-white border-emerald-500/50"
-                                    : "bg-slate-700/70 text-slate-300 border-white/10"
-                                }`}
-                              >
-                                {count}
+                            isActive ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => adjustCounter(habit, date, -1)}
+                                  className="w-7 h-7 rounded bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center"
+                                  title="Decrease"
+                                >
+                                  <ChevronDown className="h-4 w-4 text-slate-300" />
+                                </button>
+                                <div
+                                  className={`w-12 h-10 rounded-lg flex items-center justify-center text-sm font-semibold border ${
+                                    count > 0
+                                      ? "bg-emerald-600/90 text-white border-emerald-500/50"
+                                      : "bg-slate-700/70 text-slate-300 border-white/10"
+                                  }`}
+                                >
+                                  {count}
+                                </div>
+                                <button
+                                  onClick={() => adjustCounter(habit, date, 1)}
+                                  className="w-7 h-7 rounded bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center"
+                                  title="Increase"
+                                >
+                                  <ChevronUp className="h-4 w-4 text-slate-300" />
+                                </button>
                               </div>
-                              <button
-                                onClick={() => adjustCounter(habit, date, 1)}
-                                className="w-7 h-7 rounded bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center"
-                                title="Increase"
-                              >
-                                <ChevronUp className="h-4 w-4 text-slate-300" />
-                              </button>
-                            </div>
-                          ) : (
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-center text-[10px] text-slate-500">
+                                Off
+                              </div>
+                            )
+                          ) : isActive ? (
                             <button
                               onClick={() => toggleHabit(habit, date)}
                               className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors border ${
@@ -720,7 +757,10 @@ export default function WeeklyView() {
                               title={
                                 isDatesMode
                                   ? "Pick a different completion date"
-                                  : `${habit.name}: ${getCompletionRatio(habit, date)}`
+                                  : `${habit.name}: ${getCompletionRatio(
+                                      habit,
+                                      date
+                                    )}`
                               }
                             >
                               {isCompleted ? (
@@ -729,10 +769,13 @@ export default function WeeklyView() {
                                 getCompletionRatio(habit, date)
                               )}
                             </button>
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-slate-800/60 border border-slate-700/80 flex items-center justify-center text-[10px] text-slate-500">
+                              Off
+                            </div>
                           )}
 
-                          {/* Show pill ONLY for cells you've attributed AND only in Dates mode */}
-                          {isDatesMode && attrForCell && (
+                          {isDatesMode && attrForCell && isActive && (
                             <div className="text-[10px] px-2 py-0.5 rounded bg-indigo-400/10 border border-indigo-400/30 text-indigo-200">
                               Done on {shortHumanDate(attrForCell)}
                             </div>
@@ -766,15 +809,13 @@ export default function WeeklyView() {
         </div>
       </div>
 
-      {/* ---------------- Dates Overlay (single-select tied to clicked cell) ---------------- */}
+      {/* ---------------- Dates Overlay ---------------- */}
       {datesModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={closeDatesEditor}
           />
-          {/* Modal */}
           <div className="relative w-full max-w-3xl mx-3 rounded-xl border border-white/10 bg-slate-900 text-white shadow-2xl overflow-hidden">
             <div className="absolute -inset-1 bg-[conic-gradient(from_180deg_at_50%_50%,rgba(34,211,238,0.12),transparent_25%,rgba(99,102,241,0.12),transparent_50%,rgba(34,211,238,0.12),transparent_75%)] blur-2xl opacity-40 pointer-events-none" />
             <div className="relative">
@@ -793,7 +834,11 @@ export default function WeeklyView() {
                     </div>
                     {datesModal.cellContextKey && (
                       <div className="text-xs text-slate-400 mt-0.5">
-                        Ticking <span className="text-slate-200">{shortHumanDate(datesModal.cellContextKey)}</span> (this cell)
+                        Ticking{" "}
+                        <span className="text-slate-200">
+                          {shortHumanDate(datesModal.cellContextKey)}
+                        </span>{" "}
+                        (this cell)
                       </div>
                     )}
                   </div>
@@ -828,7 +873,6 @@ export default function WeeklyView() {
                     </button>
                   </div>
 
-                  {/* Weekday header */}
                   <div className="grid grid-cols-7 gap-1 mb-1 text-[11px] text-slate-400">
                     {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                       <div key={d} className="text-center">
@@ -837,7 +881,6 @@ export default function WeeklyView() {
                     ))}
                   </div>
 
-                  {/* Calendar matrix */}
                   <div className="grid grid-cols-7 gap-1">
                     {buildMonthMatrix(datesModal.monthCursor)
                       .flat()
@@ -879,7 +922,8 @@ export default function WeeklyView() {
                   <div className="min-h-[44px] flex items-center">
                     {datesModal.selectedKey ? (
                       <span className="px-2 py-1 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-100 text-sm">
-                        {datesModal.selectedKey} ({shortHumanDate(datesModal.selectedKey)})
+                        {datesModal.selectedKey} (
+                        {shortHumanDate(datesModal.selectedKey)})
                       </span>
                     ) : (
                       <span className="text-slate-500 text-sm">None</span>
@@ -903,9 +947,12 @@ export default function WeeklyView() {
                   </div>
 
                   <div className="text-xs text-slate-400 mt-3">
-                    This will check <span className="text-slate-200">the week day you clicked</span> and show a pill
-                    like <span className="text-indigo-200">“Done on Oct 14”</span> under that cell (only in Dates mode).
-                    The actual picked date does not get auto-checked.
+                    This will check{" "}
+                    <span className="text-slate-200">the week day you clicked</span>{" "}
+                    and show a pill like{" "}
+                    <span className="text-indigo-200">“Done on Oct 14”</span>{" "}
+                    under that cell (only in Dates mode). The actual picked
+                    date does not get auto-checked.
                   </div>
                 </div>
               </div>

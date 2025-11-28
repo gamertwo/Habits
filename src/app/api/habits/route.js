@@ -1,3 +1,4 @@
+// app/api/habits/route.js
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -17,6 +18,9 @@ const toObjectId = (val) => {
     return null;
   }
 };
+
+// helper: default 7-day array [Sun..Sat]
+const defaultDaysOfWeek = () => [true, true, true, true, true, true, true];
 
 /** GET /api/habits
  *  Returns all habits for the cookie userId
@@ -41,6 +45,15 @@ export async function GET() {
         h.timeSpentByDate && typeof h.timeSpentByDate === "object"
           ? h.timeSpentByDate
           : {},
+      xpPerCompletion:
+        typeof h.xpPerCompletion === "number" && h.xpPerCompletion > 0
+          ? h.xpPerCompletion
+          : 50,
+      color: typeof h.color === "string" ? h.color : "#10B981",
+      daysOfWeek:
+        Array.isArray(h.daysOfWeek) && h.daysOfWeek.length === 7
+          ? h.daysOfWeek.map(Boolean)
+          : defaultDaysOfWeek(),
     }));
 
     return json(safe);
@@ -51,7 +64,17 @@ export async function GET() {
 }
 
 /** POST /api/habits
- *  Body: { name, category?, emoji?, maxCheckOffs?, completedDates?, timeSpentByDate? }
+ *  Body: {
+ *    name,
+ *    category?,
+ *    emoji?,
+ *    maxCheckOffs?,
+ *    completedDates?,
+ *    timeSpentByDate?,
+ *    xpPerCompletion?,
+ *    color?,
+ *    daysOfWeek? [bool,bool,...] length 7
+ *  }
  */
 export async function POST(request) {
   try {
@@ -64,6 +87,26 @@ export async function POST(request) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return json({ error: "Name is required" }, { status: 400 });
 
+    const maxCheckOffs =
+      typeof body.maxCheckOffs === "number" && body.maxCheckOffs > 0
+        ? Math.floor(body.maxCheckOffs)
+        : 1;
+
+    const xpPerCompletion =
+      typeof body.xpPerCompletion === "number" && body.xpPerCompletion > 0
+        ? Math.floor(body.xpPerCompletion)
+        : 50;
+
+    const color =
+      typeof body.color === "string" && body.color.trim()
+        ? body.color.trim()
+        : "#10B981";
+
+    const daysOfWeek =
+      Array.isArray(body.daysOfWeek) && body.daysOfWeek.length === 7
+        ? body.daysOfWeek.map(Boolean)
+        : defaultDaysOfWeek();
+
     const doc = {
       name,
       category:
@@ -71,18 +114,17 @@ export async function POST(request) {
           ? body.category.trim()
           : "General",
       emoji: typeof body.emoji === "string" ? body.emoji : "",
-      maxCheckOffs:
-        typeof body.maxCheckOffs === "number" && body.maxCheckOffs > 0
-          ? Math.floor(body.maxCheckOffs)
-          : 1,
+      maxCheckOffs,
       completedDates: Array.isArray(body.completedDates)
         ? body.completedDates.map(String)
         : [], // UI normalizes to YYYY-MM-DD (local)
-      // NEW/kept: server supports extra tracking if you use it
       timeSpentByDate:
         body.timeSpentByDate && typeof body.timeSpentByDate === "object"
           ? body.timeSpentByDate
           : {},
+      xpPerCompletion,
+      color,
+      daysOfWeek,
       userId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -116,8 +158,10 @@ export async function PUT(request) {
     if (typeof rest.name === "string") update.name = rest.name.trim();
     if (typeof rest.category === "string") update.category = rest.category.trim();
     if (typeof rest.emoji === "string") update.emoji = rest.emoji;
-    if (typeof rest.maxCheckOffs === "number" && rest.maxCheckOffs > 0)
+
+    if (typeof rest.maxCheckOffs === "number" && rest.maxCheckOffs > 0) {
       update.maxCheckOffs = Math.floor(rest.maxCheckOffs);
+    }
 
     if (Array.isArray(rest.completedDates)) {
       // UI sends local YYYY-MM-DD strings; we accept as-is
@@ -126,6 +170,18 @@ export async function PUT(request) {
 
     if (rest.timeSpentByDate && typeof rest.timeSpentByDate === "object") {
       update.timeSpentByDate = rest.timeSpentByDate;
+    }
+
+    if (typeof rest.xpPerCompletion === "number" && rest.xpPerCompletion > 0) {
+      update.xpPerCompletion = Math.floor(rest.xpPerCompletion);
+    }
+
+    if (typeof rest.color === "string" && rest.color.trim()) {
+      update.color = rest.color.trim();
+    }
+
+    if (Array.isArray(rest.daysOfWeek) && rest.daysOfWeek.length === 7) {
+      update.daysOfWeek = rest.daysOfWeek.map(Boolean);
     }
 
     // Note: "attributions" (the “Done on …” pills) are local-only in the UI,
