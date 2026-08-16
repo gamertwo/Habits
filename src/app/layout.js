@@ -1,9 +1,11 @@
-import { Inter } from 'next/font/google';
+import { DM_Sans, Lora, JetBrains_Mono } from 'next/font/google';
 import { AuthProvider } from './contexts/AuthContext';
 import './globals.css';
 import Navbar from '../components/Navbar';
 
-const inter = Inter({ subsets: ['latin'] });
+const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' });
+const lora = Lora({ subsets: ['latin'], variable: '--font-lora' });
+const jetBrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono' });
 
 export const metadata = {
   title: 'Habit App',
@@ -13,7 +15,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${dmSans.variable} ${lora.variable} ${jetBrainsMono.variable}`}>
         <AuthProvider>
           <Navbar />
           <main className="pb-16">

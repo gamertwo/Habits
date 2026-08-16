@@ -216,3 +216,340 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* SAC-inspired design language
+   Translates the existing habit content into the warm Practice Desk visual system:
+   paper background, white study cards, Lora headings, mono labels, teal/amber accents. */
+:root {
+  color-scheme: light;
+  --background: 44 23% 96%;
+  --foreground: 45 8% 20%;
+  --card: 0 0% 100%;
+  --card-foreground: 45 8% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 45 8% 20%;
+  --primary: 176 84% 31%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 42 26% 95%;
+  --secondary-foreground: 45 8% 20%;
+  --muted: 42 18% 94%;
+  --muted-foreground: 42 3% 49%;
+  --accent: 32 95% 45%;
+  --accent-foreground: 0 0% 100%;
+  --border: 40 12% 89%;
+  --input: 40 12% 89%;
+  --ring: 176 84% 31%;
+  --radius: 0.8rem;
+  --sac-ink: #37352f;
+  --sac-muted: #777570;
+  --sac-soft: #9b9a97;
+  --sac-line: #e5e3df;
+  --sac-paper: #f5f4f1;
+  --sac-panel: #fafaf8;
+  --sac-card: #ffffff;
+  --sac-teal: #0d9488;
+  --sac-teal-dark: #173d3a;
+  --sac-amber: #d97706;
+  --sac-amber-soft: #fff7e9;
+  --sac-shadow: 0 12px 38px rgba(55, 53, 47, 0.07);
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--sac-paper) !important;
+  color: var(--sac-ink) !important;
+  font-family: var(--font-dm-sans), system-ui, sans-serif !important;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(13, 148, 136, 0.08), transparent 28rem),
+    radial-gradient(circle at 88% 0%, rgba(217, 119, 6, 0.1), transparent 30rem),
+    linear-gradient(180deg, #fafaf8 0%, var(--sac-paper) 52%, #eeece8 100%) !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.52;
+  background-image:
+    linear-gradient(rgba(55, 53, 47, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(55, 53, 47, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.88) 45%, transparent 100%);
+}
+
+main,
+[class*="bg-gray-950"],
+[class*="bg-gray-900"],
+[class*="bg-slate-950"],
+[class*="bg-slate-900"],
+[class*="bg-[#0a132e]"],
+[class*="bg-\[\#0a132e\]"],
+[class*="bg-\[\#0b1431\]"],
+[class*="from-gray-900"],
+[class*="to-gray-950"] {
+  background: transparent !important;
+  color: var(--sac-ink) !important;
+}
+
+nav.fixed {
+  background: rgba(250, 250, 248, 0.94) !important;
+  border-top: 1px solid var(--sac-line) !important;
+  box-shadow: 0 -10px 30px rgba(55, 53, 47, 0.08) !important;
+  backdrop-filter: blur(12px);
+}
+
+nav a,
+nav button,
+nav span,
+nav svg {
+  color: var(--sac-muted) !important;
+}
+
+nav a.text-blue-400,
+nav button.text-blue-400,
+nav a:hover,
+nav button:hover {
+  color: var(--sac-teal) !important;
+}
+
+h1,
+h2,
+h3,
+.font-bold,
+.font-black {
+  font-family: var(--font-lora), Georgia, serif !important;
+  letter-spacing: -0.025em;
+}
+
+.font-mono,
+[class*="tracking-widest"],
+[class*="tracking-wide"],
+[class*="uppercase"] {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+}
+
+[class*="uppercase"],
+[class*="tracking-widest"],
+[class*="tracking-wide"] {
+  color: var(--sac-teal) !important;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+[class*="text-white"],
+[class*="text-gray-100"],
+[class*="text-gray-200"],
+[class*="text-slate-100"],
+[class*="text-slate-200"],
+[class*="text-blue-400"],
+[class*="text-cyan"],
+[class*="text-emerald"] {
+  color: var(--sac-ink) !important;
+}
+
+[class*="text-gray-300"],
+[class*="text-gray-400"],
+[class*="text-gray-500"],
+[class*="text-slate-300"],
+[class*="text-slate-400"],
+[class*="text-slate-500"] {
+  color: var(--sac-muted) !important;
+}
+
+[class*="border-gray"],
+[class*="border-slate"],
+[class*="border-white"],
+[class*="border-cyan"],
+[class*="border-blue"] {
+  border-color: var(--sac-line) !important;
+}
+
+.rounded,
+.rounded-md,
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+[class*="rounded-"] {
+  border-radius: 13px !important;
+}
+
+form,
+.bg-card,
+[class*="bg-gray-800"],
+[class*="bg-gray-700"],
+[class*="bg-slate-800"],
+[class*="bg-white/5"],
+[class*="bg-white/10"],
+[class*="bg-\[\#0f1a3d\]"],
+[class*="bg-\[\#0b1431\]"] {
+  background: var(--sac-card) !important;
+  color: var(--sac-ink) !important;
+  border-color: var(--sac-line) !important;
+  box-shadow: var(--sac-shadow) !important;
+}
+
+form {
+  border: 1px solid var(--sac-line);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+input,
+textarea,
+select,
+option {
+  background: #f7f6f3 !important;
+  border: 1px solid var(--sac-line) !important;
+  color: var(--sac-ink) !important;
+  border-radius: 10px !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #aaa8a4 !important;
+}
+
+button,
+a {
+  text-decoration: none;
+}
+
+button[class*="bg-blue"],
+a[class*="bg-blue"],
+button[class*="bg-cyan"],
+a[class*="bg-cyan"],
+button[class*="bg-green"],
+a[class*="bg-green"],
+button[class*="bg-emerald"],
+a[class*="bg-emerald"] {
+  background: var(--sac-teal-dark) !important;
+  color: #fff !important;
+  border-color: var(--sac-teal-dark) !important;
+  box-shadow: 0 10px 24px rgba(23, 61, 58, 0.16) !important;
+}
+
+button[class*="bg-yellow"],
+a[class*="bg-yellow"] {
+  background: var(--sac-amber) !important;
+  color: #fff !important;
+}
+
+button[class*="bg-red"],
+a[class*="bg-red"],
+[class*="text-red"] {
+  background-color: #fff1ee !important;
+  color: #b13a22 !important;
+  border-color: #f0c8bf !important;
+}
+
+button[class*="hover:bg-gray"]:hover,
+a[class*="hover:bg-gray"]:hover {
+  background: #f7f6f3 !important;
+}
+
+.react-calendar {
+  background: var(--sac-card) !important;
+  color: var(--sac-ink) !important;
+  border-color: var(--sac-line) !important;
+  box-shadow: var(--sac-shadow) !important;
+}
+
+.react-calendar__tile,
+.react-calendar__navigation button,
+.react-calendar__month-view__weekdays {
+  color: var(--sac-ink) !important;
+}
+
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus,
+.react-calendar__tile--now {
+  background: var(--sac-amber-soft) !important;
+}
+
+.react-calendar__tile--active {
+  background: var(--sac-teal-dark) !important;
+  color: #fff !important;
+}
+
+[role="gridcell"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 1px 2px rgba(55, 53, 47, 0.08);
+}
+
+.sticky,
+.backdrop-blur,
+[class*="backdrop-blur"] {
+  background: rgba(255, 255, 255, 0.86) !important;
+  border-color: var(--sac-line) !important;
+}
+
+/* SAC translation for the Speed Tasks CSS module. */
+[class*="SpeedTasks_container"],
+[class*="SpeedTasks_mainTimer"],
+[class*="SpeedTasks_column"],
+[class*="SpeedTasks_taskCard"],
+[class*="SpeedTasks_modalContent"],
+[class*="SpeedTasks_progressBar"] {
+  background: var(--sac-card) !important;
+  color: var(--sac-ink) !important;
+  border: 1px solid var(--sac-line) !important;
+  box-shadow: var(--sac-shadow) !important;
+}
+
+[class*="SpeedTasks_timerDisplay"],
+[class*="SpeedTasks_columnTitle"],
+[class*="SpeedTasks_taskNumber"] {
+  color: var(--sac-teal) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-shadow: none !important;
+}
+
+[class*="SpeedTasks_primaryButton"] {
+  background: var(--sac-teal-dark) !important;
+  color: #fff !important;
+}
+
+[class*="SpeedTasks_secondaryButton"] {
+  background: #fff !important;
+  color: var(--sac-ink) !important;
+  border: 1px solid var(--sac-line) !important;
+}
+
+[class*="SpeedTasks_dropZone"] {
+  border-color: var(--sac-line) !important;
+  background: #fafaf8 !important;
+}
+
+::selection {
+  background: rgba(217, 119, 6, 0.22);
+  color: var(--sac-ink);
+}
+
+@media (max-width: 768px) {
+  body::before {
+    background-size: 24px 24px;
+  }
+
+  form {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
