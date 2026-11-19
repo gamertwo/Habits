@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { StickyNote, Plus, X, Check, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { StickyNote, Plus, X, Check, ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { loadHabits, saveHabits, makeHabit } from "@/lib/localHabits";
 import {
   dayKey,
   addDays,
@@ -22,56 +23,45 @@ const lastNDays = (n) => {
   return Array.from({ length: n }, (_, i) => addDays(today, i - (n - 1)));
 };
 
-async function saveHabit(id, patch) {
-  const res = await fetch("/api/habits", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ id, ...patch }),
-  });
-  if (!res.ok) throw new Error(`Save failed (${res.status})`);
-  return res.json();
-}
+const PALETTE = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#F59E0B", "#EF4444"];
 
 export default function UnionPage() {
   const [habits, setHabits] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
+  const [loaded, setLoaded] = useState(false);
+  const [saveState, setSaveState] = useState("idle"); // idle | saved | error
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState(PALETTE[0]);
+  const [newEmoji, setNewEmoji] = useState("");
 
   const today = dayKey();
   const week = useMemo(() => lastNDays(7), []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/habits", { credentials: "include" });
-        if (!res.ok) throw new Error(`Could not load habits (${res.status})`);
-        const data = await res.json();
-        setHabits(
-          data.map((h) => ({
-            ...h,
-            subgoals: Array.isArray(h.subgoals) ? h.subgoals : [],
-          }))
-        );
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setHabits(loadHabits());
+    setLoaded(true);
   }, []);
 
-  // Single write path: optimistic local update, then persist.
-  const commit = async (id, patch) => {
-    setHabits((prev) => prev.map((h) => (h._id === id ? { ...h, ...patch } : h)));
-    setSaveState("saving");
-    try {
-      await saveHabit(id, patch);
-      setSaveState("saved");
-    } catch (e) {
-      console.error(e);
-      setSaveState("error");
+  // Single write path: update state and persist to this browser.
+  const persist = (next) => {
+    setHabits(next);
+    setSaveState(saveHabits(next) ? "saved" : "error");
+  };
+
+  const commit = (id, patch) => {
+    persist(habits.map((h) => (h._id === id ? { ...h, ...patch } : h)));
+  };
+
+  const addHabit = (e) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    persist([...habits, makeHabit({ name: newName, color: newColor, emoji: newEmoji.trim().slice(0, 4) })]);
+    setNewName("");
+    setNewEmoji("");
+  };
+
+  const deleteHabit = (id) => {
+    if (window.confirm("Delete this habit and all its sub-goals?")) {
+      persist(habits.filter((h) => h._id !== id));
     }
   };
 
@@ -113,13 +103,42 @@ export default function UnionPage() {
           </div>
         </header>
 
-        {loading && <p className="text-[#8a8982] animate-pulse">Pinning notes…</p>}
-        {error && (
-          <div className="rounded-lg border border-red-800 bg-red-900/20 p-4 text-red-700">{error}</div>
-        )}
-        {!loading && !error && habits.length === 0 && (
+        <form onSubmit={addHabit} className="mb-8 rounded-2xl border border-[#e5e3df] bg-white p-4 flex flex-wrap items-center gap-3">
+          <input
+            value={newEmoji}
+            onChange={(e) => setNewEmoji(e.target.value)}
+            placeholder="🙂"
+            aria-label="Emoji"
+            className="w-14 rounded-md border border-[#d6d3cd] px-2 py-2 text-center"
+          />
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="New habit name…"
+            maxLength={80}
+            className="flex-1 min-w-[180px] rounded-md border border-[#d6d3cd] px-3 py-2 text-sm"
+          />
+          <div className="flex gap-1.5">
+            {PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setNewColor(c)}
+                aria-label={`Colour ${c}`}
+                className={`h-6 w-6 rounded-full border-2 ${newColor === c ? "border-[#37352f]" : "border-transparent"}`}
+                style={{ background: c }}
+              />
+            ))}
+          </div>
+          <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-[#0d9488] px-3 py-2 text-sm font-medium text-white">
+            <Plus className="h-4 w-4" /> Add habit
+          </button>
+        </form>
+
+        {!loaded && <p className="text-[#8a8982] animate-pulse">Pinning notes…</p>}
+        {loaded && habits.length === 0 && (
           <div className="rounded-lg border border-dashed border-[#d6d3cd] p-10 text-center text-[#8a8982]">
-            No habits yet. Create one first, then come back to pin sub-goals to it.
+            No habits yet. Add one above, then pin sub-goals to it.
           </div>
         )}
 
@@ -133,6 +152,7 @@ export default function UnionPage() {
               today={today}
               week={week}
               onSubgoals={(next) => commit(habit._id, { subgoals: next })}
+              onDelete={() => deleteHabit(habit._id)}
               onToggleHabit={() => toggleHabitToday(habit)}
             />
           ))}
@@ -170,7 +190,7 @@ function SaveBadge({ state }) {
 /* ----------------------------------------------------------------
    A habit rendered as a big sticky note
    ---------------------------------------------------------------- */
-function HabitNote({ habit, tilt, today, week, onSubgoals, onToggleHabit }) {
+function HabitNote({ habit, tilt, today, week, onSubgoals, onToggleHabit, onDelete }) {
   const [draft, setDraft] = useState("");
   const accent = habit.color || "#10B981";
   const rows = flatten(habit.subgoals);
@@ -210,6 +230,9 @@ function HabitNote({ habit, tilt, today, week, onSubgoals, onToggleHabit }) {
           <p className="text-[11px] text-[#777570]">{habit.category || "General"}</p>
         </div>
         <Ring pct={pct} color={accent} label={`${doneToday}/${total}`} />
+        <button onClick={onDelete} className="p-1 text-[#9b9a97] hover:text-red-600" aria-label="Delete habit" title="Delete habit">
+          <Trash2 className="h-4 w-4" />
+        </button>
       </header>
 
       {/* habit-level tick */}

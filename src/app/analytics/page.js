@@ -24,6 +24,7 @@ import {
   tickCountByDay,
   flatten,
 } from "@/lib/subgoals";
+import { loadHabits } from "@/lib/localHabits";
 
 /* ---------- palette (dark, high-contrast, accessible) ---------- */
 const C = {
@@ -210,17 +211,8 @@ export default function AnalyticsPage() {
   const today = dayKey();
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/habits", { credentials: "include" });
-        if (!res.ok) throw new Error(`Could not load habits (${res.status})`);
-        setHabits(await res.json());
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setHabits(loadHabits());
+    setLoading(false);
   }, []);
 
   const range = custom || rangeFromDays(preset);
@@ -322,7 +314,7 @@ export default function AnalyticsPage() {
         {error && <div className="rounded-lg border border-red-800 bg-red-900/20 p-4 text-red-700">{error}</div>}
         {!loading && !error && habits.length === 0 && (
           <div className="rounded-lg border border-dashed border-[#d6d3cd] p-10 text-center text-[#8a8982]">
-            No habits to analyse yet.
+            No habits yet. Add some on the Union page, then come back here.
           </div>
         )}
 

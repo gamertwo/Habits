@@ -11,7 +11,7 @@ export function middleware(request) {
   const isGoogleCallback = pathname.startsWith('/api/auth/google');
 
   // Only these pages require auth
-  const protectedPaths = ['/', '/weekly', '/progress', '/analytics'];
+  const protectedPaths = ['/', '/weekly', '/progress'];
   const isProtectedPath = protectedPaths.includes(pathname);
 
   // Allow Google OAuth callback
