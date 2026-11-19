@@ -1,5 +1,5 @@
 import { DM_Sans, Lora, JetBrains_Mono } from 'next/font/google';
-import { AuthProvider } from './contexts/AuthContext';
+import LocalApiInstaller from './LocalApiInstaller';
 import './globals.css';
 import Navbar from '../components/Navbar';
 
@@ -16,12 +16,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${dmSans.variable} ${lora.variable} ${jetBrainsMono.variable}`}>
-        <AuthProvider>
-          <Navbar />
-          <main className="pb-16">
-            {children}
-          </main>
-        </AuthProvider>
+        <LocalApiInstaller />
+        <Navbar />
+        <main className="pb-16">
+          {children}
+        </main>
       </body>
     </html>
   );

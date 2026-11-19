@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash, Edit, LogOut, Menu } from "lucide-react";
+import { Plus, Trash, Edit, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -143,20 +143,6 @@ export default function HabitsPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-      if (response.ok) {
-        router.push("/login");
-      }
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-md mx-auto">
@@ -176,26 +162,8 @@ export default function HabitsPage() {
             <Menu className="h-6 w-6" />
           </button>
 
-          <button
-            onClick={handleLogout}
-            className="hidden md:flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <LogOut className="h-5 w-5" />
-            <span>Logout</span>
-          </button>
         </div>
 
-        {showMobileMenu && (
-          <div className="md:hidden mb-6 bg-gray-800 rounded-lg p-4">
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              <LogOut className="h-5 w-5" />
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
