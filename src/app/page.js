@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash, Edit, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
+import HabitImportExport from "@/components/HabitImportExport";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -164,6 +165,8 @@ export default function HabitsPage() {
 
         </div>
 
+
+        <div className="mb-6"><HabitImportExport onChange={() => fetchHabits()} /></div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">

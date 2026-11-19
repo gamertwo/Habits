@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { StickyNote, Plus, X, Check, ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { loadHabits, saveHabits, makeHabit } from "@/lib/localHabits";
+import HabitImportExport from "@/components/HabitImportExport";
 import {
   dayKey,
   addDays,
@@ -103,6 +104,7 @@ export default function UnionPage() {
           </div>
         </header>
 
+        <div className="mb-4"><HabitImportExport onChange={setHabits} /></div>
         <form onSubmit={addHabit} className="mb-8 rounded-2xl border border-[#e5e3df] bg-white p-4 flex flex-wrap items-center gap-3">
           <input
             value={newEmoji}
