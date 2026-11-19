@@ -1,657 +1,652 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  Radar,
   BarChart,
   Bar,
+  Cell,
 } from "recharts";
-import { Download, Upload, BarChart3, Calendar } from "lucide-react";
+import { Download, Flame, Target, Trophy, Layers, Sparkles } from "lucide-react";
+import {
+  dayKey,
+  addDays,
+  habitDayCounts,
+  tickCountByDay,
+  flatten,
+} from "@/lib/subgoals";
 
-export default function AnalyticsPage() {
-  const [habits, setHabits] = useState([]);
-  const [selectedTimeframe, setSelectedTimeframe] = useState("week");
-  const [chartData, setChartData] = useState([]);
-  const [customStartDate, setCustomStartDate] = useState("");
-  const [customEndDate, setCustomEndDate] = useState("");
-  const [isCustomRange, setIsCustomRange] = useState(false);
-  const [habitStats, setHabitStats] = useState([]);
+/* ---------- palette (dark, high-contrast, accessible) ---------- */
+const C = {
+  habit: "#34d399", // emerald — habit-level ticks
+  sub: "#60a5fa", // blue — sub-goal ticks
+  purple: "#a78bfa",
+  amber: "#fbbf24",
+  grid: "rgba(55,53,47,0.08)",
+  axis: "#6b7280",
+  text: "#37352f",
+};
+const HEAT = ["#ece9e2", "#064e3b", "#047857", "#10b981", "#6ee7b7"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const PRESETS = [
+  { label: "7d", days: 7 },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+  { label: "1y", days: 365 },
+];
 
-  useEffect(() => {
-    fetchHabits();
-  }, []);
+/* ---------- pure analytics ---------- */
+const rangeFromDays = (n) => {
+  const end = dayKey();
+  return { start: addDays(end, -(n - 1)), end };
+};
 
-  useEffect(() => {
-    processChartData();
-    calculateHabitStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [habits, selectedTimeframe, customStartDate, customEndDate, isCustomRange]);
+const buildDays = (start, end) => {
+  const out = [];
+  for (let d = start, guard = 0; d <= end && guard < 1000; guard++, d = addDays(d, 1)) out.push(d);
+  return out;
+};
 
-  const fetchHabits = async () => {
-    try {
-      const response = await fetch("/api/habits");
-      const data = await response.json();
-      setHabits(data);
+function currentStreak(counts, today) {
+  let d = counts[today] ? today : addDays(today, -1);
+  let n = 0;
+  while (counts[d]) {
+    n++;
+    d = addDays(d, -1);
+  }
+  return n;
+}
 
-      // Set default custom dates when habits are loaded
-      if (data.length > 0 && !customStartDate) {
-        const today = new Date();
-        const oneMonthAgo = new Date();
-        oneMonthAgo.setMonth(today.getMonth() - 1);
+function bestStreak(counts, days) {
+  let best = 0;
+  let run = 0;
+  for (const d of days) {
+    if (counts[d]) {
+      run++;
+      best = Math.max(best, run);
+    } else run = 0;
+  }
+  return best;
+}
 
-        setCustomStartDate(oneMonthAgo.toISOString().split("T")[0]);
-        setCustomEndDate(today.toISOString().split("T")[0]);
+function analyse(habits, days, today) {
+  const inRange = new Set(days);
+  const perDay = Object.fromEntries(days.map((d) => [d, { date: d, habit: 0, sub: 0 }]));
+  const allUnits = {}; // every day, all time: used for streaks + heatmap
+  let weekdaySum = Array(7).fill(0);
+
+  const perHabit = habits.map((h) => {
+    const hc = habitDayCounts(h);
+    const sc = tickCountByDay(h.subgoals || []);
+    const merged = {};
+    const keys = new Set([...Object.keys(hc), ...Object.keys(sc)]);
+    let habitTicks = 0;
+    let subTicks = 0;
+    const activeInRange = new Set();
+
+    for (const d of keys) {
+      const units = (hc[d] || 0) + (sc[d] || 0);
+      merged[d] = units;
+      allUnits[d] = (allUnits[d] || 0) + units;
+      if (inRange.has(d)) {
+        habitTicks += hc[d] || 0;
+        subTicks += sc[d] || 0;
+        activeInRange.add(d);
       }
-    } catch (error) {
-      console.error("Error fetching habits:", error);
     }
-  };
-
-  const buildDateRange = () => {
-    const dateRange = [];
-
-    if (isCustomRange && customStartDate && customEndDate) {
-      const start = new Date(customStartDate);
-      const end = new Date(customEndDate);
-
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays > 365) {
-        alert("Date range is too large. Please select a range of 365 days or less.");
-        return [];
-      }
-
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        dateRange.push(d.toISOString().split("T")[0]);
-      }
-    } else {
-      const days = {
-        week: 7,
-        month: 30,
-        year: 365,
-      }[selectedTimeframe];
-
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        dateRange.push(date.toISOString().split("T")[0]);
-      }
+    for (const d of days) if (perDay[d]) {
+      perDay[d].habit += hc[d] || 0;
+      perDay[d].sub += sc[d] || 0;
     }
 
-    return dateRange;
-  };
+    return {
+      id: h._id,
+      name: h.name,
+      emoji: h.emoji,
+      color: h.color || "#10B981",
+      category: h.category || "General",
+      habitTicks,
+      subTicks,
+      totalTicks: habitTicks + subTicks,
+      activeDays: activeInRange.size,
+      rate: days.length ? activeInRange.size / days.length : 0,
+      current: currentStreak(merged, today),
+      best: bestStreak(merged, days),
+      merged,
+      subgoalCount: flatten(h.subgoals || []).length,
+    };
+  });
 
-  const calculateHabitStats = () => {
-    if (!habits.length) return;
+  // Global per-day totals
+  const series = days.map((d) => {
+    const row = perDay[d];
+    const dow = new Date(d + "T00:00:00").getDay();
+    weekdaySum[dow] += row.habit + row.sub;
+    return { ...row, total: row.habit + row.sub, label: d.slice(5) };
+  });
 
-    const dateRange = buildDateRange();
-    if (!dateRange.length) return;
+  const activeDayCount = series.filter((r) => r.total > 0).length;
+  const totalTicks = series.reduce((a, r) => a + r.total, 0);
+  const subTotal = series.reduce((a, r) => a + r.sub, 0);
+  const peak = series.reduce((m, r) => (r.total > (m?.total || 0) ? r : m), null);
 
-    const stats = habits.map((habit) => {
-      // completions in range (count of days with ticks — matches how you stored them)
-      const completions =
-        habit.completedDates?.filter((date) => dateRange.includes(date)).length || 0;
+  const weekdayCounts = Array(7).fill(0);
+  for (const d of days) weekdayCounts[new Date(d + "T00:00:00").getDay()]++;
+  const weekday = WEEKDAYS.map((name, i) => ({
+    day: name,
+    avg: weekdayCounts[i] ? +(weekdaySum[i] / weekdayCounts[i]).toFixed(2) : 0,
+  }));
 
-      const maxCheck = habit.maxCheckOffs || 1;
-      const totalPossibleCompletions = dateRange.length * maxCheck;
-      const completionRate =
-        totalPossibleCompletions > 0
-          ? (completions / totalPossibleCompletions) * 100
-          : 0;
-
-      // longest streak in range
-      let currentStreak = 0;
-      let longestStreak = 0;
-      let lastDate = null;
-
-      const sortedDates = [...(habit.completedDates || [])]
-        .filter((date) => dateRange.includes(date))
-        .sort();
-
-      sortedDates.forEach((date) => {
-        if (!lastDate) {
-          currentStreak = 1;
-        } else {
-          const lastDateObj = new Date(lastDate);
-          const currentDateObj = new Date(date);
-          lastDateObj.setDate(lastDateObj.getDate() + 1);
-
-          if (lastDateObj.toISOString().split("T")[0] === date) {
-            currentStreak++;
-          } else {
-            currentStreak = 1;
-          }
-        }
-
-        if (currentStreak > longestStreak) {
-          longestStreak = currentStreak;
-        }
-
-        lastDate = date;
-      });
-
-      const xpPer =
-        typeof habit.xpPerCompletion === "number" && habit.xpPerCompletion > 0
-          ? habit.xpPerCompletion
-          : 50;
-      const xpEarned = completions * xpPer;
-
-      return {
-        id: habit._id || habit.id,
-        name: habit.name,
-        category: habit.category,
-        completions,
-        completionRate: completionRate.toFixed(1),
-        longestStreak,
-        xpEarned,
-        xpPer,
-      };
-    });
-
-    setHabitStats(stats);
-  };
-
-  const processChartData = () => {
-    const dateRange = buildDateRange();
-    if (!dateRange.length) return;
-
-    const data = dateRange.map((dateStr) => {
-      const completions = habits.reduce((acc, habit) => {
-        const dayCompletions =
-          habit.completedDates?.filter((d) => d === dateStr).length || 0;
-        return acc + dayCompletions;
-      }, 0);
-
-      return {
-        date: dateStr,
-        completions,
-      };
-    });
-
-    setChartData(data);
-  };
-
-  const exportData = () => {
-    const dataStr = JSON.stringify(habits, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "habits-data.json";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const importData = (event) => {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const importedData = JSON.parse(e.target.result);
-        await fetch("/api/habits/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(importedData),
-        });
-        fetchHabits();
-      } catch (error) {
-        console.error("Error importing data:", error);
+  // Sub-goal leaderboard (path-labelled) within range
+  const subRows = [];
+  const dayLookup = new Set(days);
+  for (const h of habits) {
+    const walk = (nodes, trail) => {
+      for (const n of nodes) {
+        const inR = n.completedDates.filter((d) => dayLookup.has(d)).length;
+        const path = [...trail, n.title];
+        if (inR > 0) subRows.push({ label: path.join(" › "), habit: h.name, ticks: inR, color: h.color || C.sub });
+        walk(n.children || [], path);
       }
     };
-    reader.readAsText(file);
+    walk(h.subgoals || [], [h.name]);
+  }
+  subRows.sort((a, b) => b.ticks - a.ticks);
+
+  return {
+    series,
+    perHabit,
+    weekday,
+    subRows: subRows.slice(0, 12),
+    allUnits,
+    kpi: {
+      consistency: days.length ? activeDayCount / days.length : 0,
+      activeDayCount,
+      totalTicks,
+      subShare: totalTicks ? subTotal / totalTicks : 0,
+      current: currentStreak(allUnits, today),
+      best: bestStreak(allUnits, days),
+      peak,
+    },
+  };
+}
+
+function heatmapWeeks(allUnits, today) {
+  const start = addDays(today, -363);
+  const offset = new Date(start + "T00:00:00").getDay();
+  const first = addDays(start, -offset);
+  const cells = [];
+  for (let i = 0; i < 53 * 7; i++) {
+    const d = addDays(first, i);
+    if (d > today) break;
+    cells.push({ date: d, units: allUnits[d] || 0, inWindow: d >= start });
+  }
+  const values = cells.filter((c) => c.units > 0).map((c) => c.units).sort((a, b) => a - b);
+  const q = (p) => (values.length ? values[Math.min(values.length - 1, Math.floor(p * values.length))] : 1);
+  const t = [q(0.25), q(0.5), q(0.75)];
+  const level = (u) => (u === 0 ? 0 : u <= t[0] ? 1 : u <= t[1] ? 2 : u <= t[2] ? 3 : 4);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7).map((c) => ({ ...c, level: level(c.units) })));
+  return weeks;
+}
+
+/* ================================================================ */
+export default function AnalyticsPage() {
+  const [habits, setHabits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [preset, setPreset] = useState(30);
+  const [custom, setCustom] = useState(null); // {start,end}
+  const [customDraft, setCustomDraft] = useState({ start: "", end: "" });
+  const today = dayKey();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/habits", { credentials: "include" });
+        if (!res.ok) throw new Error(`Could not load habits (${res.status})`);
+        setHabits(await res.json());
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const range = custom || rangeFromDays(preset);
+  const days = useMemo(() => {
+    const d = buildDays(range.start, range.end);
+    return d.length > 730 ? d.slice(-730) : d;
+  }, [range.start, range.end]);
+
+  const A = useMemo(() => analyse(habits, days, today), [habits, days, today]);
+  const weeks = useMemo(() => heatmapWeeks(A.allUnits, today), [A.allUnits, today]);
+  const matrixDays = useMemo(() => buildDays(addDays(today, -13), today), [today]);
+
+  const applyCustom = () => {
+    if (!customDraft.start || !customDraft.end || customDraft.start > customDraft.end) return;
+    setCustom({ ...customDraft });
   };
 
-  const toggleCustomRange = () => {
-    setIsCustomRange(!isCustomRange);
+  const exportCsv = () => {
+    const rows = [["date", "habit_ticks", "subgoal_ticks", "total"], ...A.series.map((r) => [r.date, r.habit, r.sub, r.total])];
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `habits-${range.start}_${range.end}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  // ------ Extra motivating stats ------
-  const totalCompletions = chartData.reduce(
-    (sum, day) => sum + day.completions,
-    0
-  );
-  const avgDailyCompletions =
-    chartData.length > 0 ? (totalCompletions / chartData.length).toFixed(1) : "0";
-
-  const totalXp = habitStats.reduce((sum, h) => sum + h.xpEarned, 0);
-
-  const bestHabitByRate =
-    habitStats.length > 0
-      ? [...habitStats].sort(
-          (a, b) => parseFloat(b.completionRate) - parseFloat(a.completionRate)
-        )[0]
-      : null;
-
-  const todayStr = new Date().toISOString().split("T")[0];
-  const todayCompletions = habits.reduce((acc, habit) => {
-    const dayCompletions =
-      habit.completedDates?.filter((d) => d === todayStr).length || 0;
-    return acc + dayCompletions;
-  }, 0);
-  const todayXp = habits.reduce((acc, habit) => {
-    const xpPer =
-      typeof habit.xpPerCompletion === "number" && habit.xpPerCompletion > 0
-        ? habit.xpPerCompletion
-        : 50;
-    const dayCompletions =
-      habit.completedDates?.filter((d) => d === todayStr).length || 0;
-    return acc + dayCompletions * xpPer;
-  }, 0);
-  const todayActiveHabits = habits.filter(
-    (habit) =>
-      (habit.completedDates || []).filter((d) => d === todayStr).length > 0
-  ).length;
-
-  const dailyChipIntensity = (completions) => {
-    if (completions === 0) return "bg-gray-800 border-gray-700 text-gray-400";
-    if (completions === 1)
-      return "bg-emerald-900/60 border-emerald-600/70 text-emerald-200";
-    if (completions <= 3)
-      return "bg-emerald-800/80 border-emerald-500/80 text-emerald-100";
-    return "bg-emerald-700 border-emerald-400 text-emerald-50";
+  const tooltipStyle = {
+    background: "#ffffff",
+    border: "1px solid #ece9e2",
+    borderRadius: 8,
+    color: "#37352f",
+    fontSize: 12,
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-2">
-          <BarChart3 className="h-8 w-8 text-blue-400" />
+    <div className="min-h-screen bg-[#f5f4f1] text-[#37352f] pb-32">
+      <div className="max-w-6xl mx-auto px-4 md:px-8 pt-6 md:pt-10 space-y-6">
+        {/* ---------- header + controls ---------- */}
+        <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-100">Analytics</h1>
-            <p className="text-sm text-gray-400">
-              See the story of your habits across days, not just numbers.
+            <div className="flex items-center gap-2 text-teal-700">
+              <Sparkles className="h-5 w-5" />
+              <span className="text-xs uppercase tracking-[0.25em]">Analytics</span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold mt-1">Progress, measured</h1>
+            <p className="text-[#777570] text-sm mt-1">
+              {range.start} → {range.end} · {days.length} days · habit ticks and sub-goal ticks combined
             </p>
           </div>
-        </div>
 
-        {/* Export / timeframe / custom dates */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 mt-4">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-lg text-white">
-                  Data Export / Import
-                </CardTitle>
-                <div className="flex gap-2">
-                  <button
-                    onClick={exportData}
-                    className="p-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Download className="h-5 w-5 text-white" />
-                  </button>
-                  <label className="p-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
-                    <Upload className="h-5 w-5 text-white" />
-                    <input
-                      type="file"
-                      onChange={importData}
-                      accept=".json"
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
-
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">Timeframe</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {["week", "month", "year"].map((timeframe) => (
-                  <button
-                    key={timeframe}
-                    onClick={() => {
-                      setSelectedTimeframe(timeframe);
-                      setIsCustomRange(false);
-                    }}
-                    className={`px-4 py-2 rounded-lg transition-colors ${
-                      selectedTimeframe === timeframe && !isCustomRange
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    }`}
-                  >
-                    {timeframe.charAt(0).toUpperCase() + timeframe.slice(1)}
-                  </button>
-                ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-[#e5e3df] bg-white p-1">
+              {PRESETS.map((p) => (
                 <button
-                  onClick={toggleCustomRange}
-                  className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-1 ${
-                    isCustomRange
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  key={p.label}
+                  onClick={() => {
+                    setCustom(null);
+                    setPreset(p.days);
+                  }}
+                  className={`px-3 py-1.5 text-sm rounded-md transition ${
+                    !custom && preset === p.days ? "bg-[#e8e6e1] text-[#37352f] font-medium" : "text-[#777570] hover:text-[#37352f]"
                   }`}
                 >
-                  <Calendar className="h-4 w-4" />
-                  Custom
+                  {p.label}
                 </button>
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 text-xs">
+              <input
+                type="date"
+                value={customDraft.start}
+                onChange={(e) => setCustomDraft((s) => ({ ...s, start: e.target.value }))}
+                className="rounded-md bg-white border border-[#e5e3df] px-2 py-1.5 text-[#37352f]"
+              />
+              <span className="text-[#8a8982]">to</span>
+              <input
+                type="date"
+                value={customDraft.end}
+                onChange={(e) => setCustomDraft((s) => ({ ...s, end: e.target.value }))}
+                className="rounded-md bg-white border border-[#e5e3df] px-2 py-1.5 text-[#37352f]"
+              />
+              <button onClick={applyCustom} className="px-2.5 py-1.5 rounded-md bg-[#f1efeb] hover:bg-[#e8e6e1] border border-[#d6d3cd]">
+                Apply
+              </button>
+            </div>
+            <button
+              onClick={exportCsv}
+              disabled={!A.series.length}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-white border border-[#e5e3df] hover:bg-[#f1efeb] disabled:opacity-40"
+            >
+              <Download className="h-4 w-4" /> CSV
+            </button>
+          </div>
+        </header>
 
-          <Card
-            className={`bg-gray-800 border-gray-700 ${
-              !isCustomRange ? "opacity-60" : ""
-            }`}
-          >
-            <CardHeader>
-              <CardTitle className="text-lg text-white">
-                Custom Date Range
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm text-gray-400">Start Date</label>
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    disabled={!isCustomRange}
-                    className="px-3 py-2 bg-gray-700 rounded-lg text-white"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm text-gray-400">End Date</label>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    disabled={!isCustomRange}
-                    className="px-3 py-2 bg-gray-700 rounded-lg text-white"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {loading && <p className="text-[#8a8982] animate-pulse">Crunching numbers…</p>}
+        {error && <div className="rounded-lg border border-red-800 bg-red-900/20 p-4 text-red-700">{error}</div>}
+        {!loading && !error && habits.length === 0 && (
+          <div className="rounded-lg border border-dashed border-[#d6d3cd] p-10 text-center text-[#8a8982]">
+            No habits to analyse yet.
+          </div>
+        )}
 
-        {/* Summary / motivation strip */}
-        <div className="mb-4">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">
-                Summary for{" "}
-                {isCustomRange && customStartDate && customEndDate
-                  ? `${customStartDate} → ${customEndDate}`
-                  : selectedTimeframe}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-gray-700/80 p-4 rounded-lg border border-gray-600/80">
-                  <p className="text-gray-400 text-sm">Total Completions</p>
-                  <p className="text-2xl font-bold text-white">
-                    {totalCompletions}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Avg per day:{" "}
-                    <span className="font-semibold text-gray-200">
-                      {avgDailyCompletions}
-                    </span>
-                  </p>
-                </div>
-                <div className="bg-gray-700/80 p-4 rounded-lg border border-gray-600/80">
-                  <p className="text-gray-400 text-sm">Total XP Earned</p>
-                  <p className="text-2xl font-bold text-emerald-300">
-                    {totalXp}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Every completion is pushing your bar up.
-                  </p>
-                </div>
-                <div className="bg-gray-700/80 p-4 rounded-lg border border-gray-600/80">
-                  <p className="text-gray-400 text-sm">Best Performing Habit</p>
-                  <p className="text-lg font-semibold text-white">
-                    {bestHabitByRate ? bestHabitByRate.name : "None yet"}
-                  </p>
-                  {bestHabitByRate && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      {bestHabitByRate.completionRate}% completion ·{" "}
-                      {bestHabitByRate.longestStreak} day streak
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {!loading && !error && habits.length > 0 && (
+          <>
+            {/* ---------- KPI row ---------- */}
+            <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiRing
+                label="Consistency"
+                value={`${Math.round(A.kpi.consistency * 100)}%`}
+                sub={`${A.kpi.activeDayCount} of ${days.length} days active`}
+                pct={A.kpi.consistency}
+                color={C.habit}
+              />
+              <KpiCard icon={<Target className="h-4 w-4" />} label="Total ticks" value={A.kpi.totalTicks} sub={`${Math.round(A.kpi.subShare * 100)}% from sub-goals`} color={C.sub} />
+              <KpiCard icon={<Flame className="h-4 w-4" />} label="Current streak" value={`${A.kpi.current}d`} sub="any habit, any tick" color={C.amber} />
+              <KpiCard icon={<Trophy className="h-4 w-4" />} label="Best streak" value={`${A.kpi.best}d`} sub={A.kpi.peak?.total ? `peak ${A.kpi.peak.total} on ${A.kpi.peak.date.slice(5)}` : "in range"} color={C.purple} />
+            </section>
 
-        {/* Today snapshot */}
-        <div className="mb-4">
-          <Card className="bg-gradient-to-r from-emerald-700/60 via-emerald-600/50 to-blue-600/50 border border-emerald-400/40">
-            <CardHeader>
-              <CardTitle className="text-lg text-white flex justify-between items-center">
-                <span>Today&apos;s Snapshot</span>
-                <span className="text-xs uppercase tracking-wide text-emerald-100">
-                  {todayStr}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-emerald-100 text-sm">Completions Today</p>
-                  <p className="text-3xl font-bold text-white">
-                    {todayCompletions}
-                  </p>
-                  <p className="text-xs text-emerald-100 mt-1">
-                    You touched{" "}
-                    <span className="font-semibold">
-                      {todayActiveHabits}/{habits.length || 0}
-                    </span>{" "}
-                    habits today.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-emerald-100 text-sm">XP Gained Today</p>
-                  <p className="text-3xl font-bold text-white">{todayXp}</p>
-                  <p className="text-xs text-emerald-100 mt-1">
-                    Even one small action is progress. This is you stacking XP.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-emerald-100 text-sm">Vibe Check</p>
-                  <p className="text-lg font-semibold text-white">
-                    {todayCompletions === 0
-                      ? "Soft day — restart is always allowed."
-                      : todayCompletions < 3
-                      ? "Slow burn — tiny wins still count."
-                      : "You’re on a roll 🔥"}
-                  </p>
-                  <p className="text-xs text-emerald-100 mt-1">
-                    Tomorrow is just another chance to add one more tick.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts row (trend + bar) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">
-                Completion Trend
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
+            {/* ---------- daily activity ---------- */}
+            <Panel title="Daily momentum" hint="Stacked: habit ticks + sub-goal ticks per day">
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <XAxis
-                      dataKey="date"
-                      stroke="#9CA3AF"
-                      tick={{ fontSize: 12 }}
-                      tickFormatter={(value) => {
-                        if (chartData.length > 30) {
-                          return value.slice(5); // MM-DD
-                        }
-                        return value;
-                      }}
-                    />
-                    <YAxis stroke="#9CA3AF" />
-                    <Tooltip contentStyle={{ backgroundColor: "#111827" }} />
-                    <Line
-                      type="monotone"
-                      dataKey="completions"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
+                  <AreaChart data={A.series} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gHabit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C.habit} stopOpacity={0.8} />
+                        <stop offset="100%" stopColor={C.habit} stopOpacity={0.15} />
+                      </linearGradient>
+                      <linearGradient id="gSub" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C.sub} stopOpacity={0.8} />
+                        <stop offset="100%" stopColor={C.sub} stopOpacity={0.15} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke={C.grid} vertical={false} />
+                    <XAxis dataKey="label" stroke={C.axis} tick={{ fontSize: 11 }} minTickGap={24} />
+                    <YAxis stroke={C.axis} tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#9ca3af" }} />
+                    <Area type="monotone" dataKey="habit" stackId="1" stroke={C.habit} fill="url(#gHabit)" name="Habit ticks" />
+                    <Area type="monotone" dataKey="sub" stackId="1" stroke={C.sub} fill="url(#gSub)" name="Sub-goal ticks" />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
-          </Card>
+            </Panel>
 
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">
-                Daily Completions
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <XAxis
-                      dataKey="date"
-                      stroke="#9CA3AF"
-                      tick={{ fontSize: 12 }}
-                      tickFormatter={(value) => {
-                        if (chartData.length > 30) {
-                          return value.slice(5); // MM-DD
-                        }
-                        return value;
-                      }}
-                    />
-                    <YAxis stroke="#9CA3AF" />
-                    <Tooltip contentStyle={{ backgroundColor: "#111827" }} />
-                    <Bar dataKey="completions" fill="#3B82F6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Daily breakdown chips – “every single day” POV */}
-        <div className="mb-6">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">
-                Daily Breakdown
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chartData.length === 0 ? (
-                <p className="text-sm text-gray-400">
-                  No data yet. Once you start checking off habits, each day will
-                  show up here.
-                </p>
-              ) : (
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {chartData.map((day) => (
-                    <div
-                      key={day.date}
-                      className={`min-w-[90px] px-3 py-2 rounded-lg border text-xs flex flex-col items-start ${dailyChipIntensity(
-                        day.completions
-                      )}`}
-                    >
-                      <span className="font-semibold">
-                        {day.date.slice(5)}{/* MM-DD */}
-                      </span>
-                      <span className="mt-1">
-                        {day.completions}{" "}
-                        <span className="text-[10px] opacity-80">
-                          {day.completions === 1 ? "check" : "checks"}
-                        </span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Habit Performance table + “top habits” vibe */}
-        <div className="mt-2">
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg text-white">
-                  Habit Performance
-                </CardTitle>
-                <p className="text-xs text-gray-400">
-                  Zoomed-in view of each habit in this range.
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {habitStats.length === 0 ? (
-                <p className="text-sm text-gray-400">
-                  No habit data available yet. Once you log some completions,
-                  you’ll see per-habit stats here.
-                </p>
-              ) : (
+            <div className="grid lg:grid-cols-5 gap-6">
+              {/* ---------- heatmap ---------- */}
+              <Panel className="lg:col-span-3" title="Year in squares" hint="Last 52 weeks · all habits combined">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-gray-200 text-sm">
+                  <div className="flex gap-[3px] min-w-max">
+                    {weeks.map((week, wi) => (
+                      <div key={wi} className="flex flex-col gap-[3px]">
+                        {week.map((c) => (
+                          <div
+                            key={c.date}
+                            title={`${c.date}: ${c.units} tick${c.units === 1 ? "" : "s"}`}
+                            className={`h-3 w-3 rounded-[3px] ${c.inWindow ? "" : "opacity-30"} ${c.date === today ? "outline outline-1 outline-gray-300" : ""}`}
+                            style={{ background: HEAT[c.level] }}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <Legend />
+              </Panel>
+
+              {/* ---------- weekday rhythm ---------- */}
+              <Panel className="lg:col-span-2" title="Weekly rhythm" hint="Average ticks per weekday in range">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={A.weekday} outerRadius="72%">
+                      <PolarGrid stroke={C.grid} />
+                      <PolarAngleAxis dataKey="day" tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                      <Radar dataKey="avg" stroke={C.purple} fill={C.purple} fillOpacity={0.35} name="Avg ticks" />
+                      <Tooltip contentStyle={tooltipStyle} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Panel>
+            </div>
+
+            {/* ---------- habit rings ---------- */}
+            <Panel title="Habit orbits" hint="Share of days active in range · streak and volume alongside">
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {A.perHabit.map((h) => (
+                  <div key={h.id} className="rounded-xl border border-[#e5e3df] bg-[#fafaf8] p-4 flex items-center gap-4">
+                    <OrbitRing pct={h.rate} color={h.color} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{h.emoji || "•"}</span>
+                        <span className="font-semibold truncate">{h.name}</span>
+                      </div>
+                      <div className="text-[11px] text-[#8a8982]">{h.category}</div>
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                        <Mini label="ticks" value={h.totalTicks} />
+                        <Mini label="streak" value={`${h.current}d`} />
+                        <Mini label="best" value={`${h.best}d`} />
+                      </div>
+                      <div className="mt-2 flex gap-1.5 text-[10px] text-[#8a8982]">
+                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: C.habit }} />{h.habitTicks} habit</span>
+                        <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: C.sub }} />{h.subTicks} sub</span>
+                        <span className="ml-auto">{h.subgoalCount} sub-goals</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* ---------- sub-goal leaderboard ---------- */}
+              <Panel title="Sub-goal leaderboard" hint="Where your ticks actually land (top 12)">
+                {A.subRows.length === 0 ? (
+                  <Empty text="No sub-goal ticks in this range yet. Tick some on the Union board." />
+                ) : (
+                  <div style={{ height: Math.max(180, A.subRows.length * 30) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={A.subRows} layout="vertical" margin={{ top: 0, right: 24, left: 8, bottom: 0 }}>
+                        <CartesianGrid stroke={C.grid} horizontal={false} />
+                        <XAxis type="number" stroke={C.axis} tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="label" width={180} stroke={C.axis} tick={{ fontSize: 11, fill: "#4a4843" }} />
+                        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                        <Bar dataKey="ticks" radius={[0, 6, 6, 0]} name="Ticks">
+                          {A.subRows.map((r, i) => (
+                            <Cell key={i} fill={r.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </Panel>
+
+              {/* ---------- habit × day matrix ---------- */}
+              <Panel title="Last 14 days" hint="Each row is a habit; brighter = more ticks">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="py-3 px-4 text-left">Habit</th>
-                        <th className="py-3 px-4 text-left">Category</th>
-                        <th className="py-3 px-4 text-center">Completions</th>
-                        <th className="py-3 px-4 text-center">
-                          Completion Rate
-                        </th>
-                        <th className="py-3 px-4 text-center">
-                          Longest Streak
-                        </th>
-                        <th className="py-3 px-4 text-center">XP Earned</th>
+                      <tr className="text-[#8a8982]">
+                        <th className="text-left font-normal pb-2 pr-3">Habit</th>
+                        {matrixDays.map((d) => (
+                          <th key={d} className="font-normal pb-2 px-0.5">{d.slice(8)}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {habitStats.map((habit) => (
-                        <tr
-                          key={habit.id}
-                          className="border-b border-gray-800 hover:bg-gray-750/70"
-                        >
-                          <td className="py-3 px-4">{habit.name}</td>
-                          <td className="py-3 px-4">
-                            {habit.category || "—"}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {habit.completions}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {habit.completionRate}%
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {habit.longestStreak} days
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {habit.xpEarned}
-                          </td>
+                      {A.perHabit.map((h) => (
+                        <tr key={h.id}>
+                          <td className="pr-3 py-1 text-[#4a4843] whitespace-nowrap max-w-[120px] truncate">{h.name}</td>
+                          {matrixDays.map((d) => {
+                            const u = h.merged[d] || 0;
+                            return (
+                              <td key={d} className="px-0.5 py-1">
+                                <div
+                                  title={`${h.name} · ${d}: ${u}`}
+                                  className="h-5 w-5 rounded-[4px] mx-auto"
+                                  style={{
+                                    background: u ? h.color : "#ece9e2",
+                                    opacity: u ? Math.min(0.45 + u * 0.2, 1) : 1,
+                                  }}
+                                />
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              </Panel>
+            </div>
+
+            {/* ---------- insight strip ---------- */}
+            <Panel title="Readout" hint="Auto-generated from your data">
+              <ul className="grid md:grid-cols-2 gap-3 text-sm text-[#4a4843]">
+                <Insight icon={<Layers className="h-4 w-4 text-teal-700" />}>
+                  {A.kpi.subShare > 0.5
+                    ? `Most of your work is in sub-goals (${Math.round(A.kpi.subShare * 100)}%). Your granular system is carrying the load.`
+                    : A.kpi.totalTicks
+                    ? `Habit-level ticks dominate (${Math.round((1 - A.kpi.subShare) * 100)}%). Breaking habits into sub-goals could add detail.`
+                    : "No ticks yet in this range."}
+                </Insight>
+                <Insight icon={<Flame className="h-4 w-4 text-amber-700" />}>
+                  {A.kpi.current > 0
+                    ? `Live streak: ${A.kpi.current} day${A.kpi.current === 1 ? "" : "s"}. Protect it.`
+                    : "No live streak. One tick today restarts the count."}
+                </Insight>
+                <Insight icon={<Sparkles className="h-4 w-4 text-violet-600" />}>
+                  {(() => {
+                    const best = [...A.weekday].sort((a, b) => b.avg - a.avg)[0];
+                    return best && best.avg > 0
+                      ? `${best.day} is your strongest day (avg ${best.avg} ticks). Schedule the hardest sub-goals there.`
+                      : "Weekday pattern appears once you have a few weeks of data.";
+                  })()}
+                </Insight>
+                <Insight icon={<Target className="h-4 w-4 text-emerald-700" />}>
+                  {A.perHabit.length
+                    ? `Most consistent: ${[...A.perHabit].sort((a, b) => b.rate - a.rate)[0].name} (${Math.round([...A.perHabit].sort((a, b) => b.rate - a.rate)[0].rate * 100)}% of days).`
+                    : "Add habits to see rankings."}
+                </Insight>
+              </ul>
+            </Panel>
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+/* ---------- small presentational pieces ---------- */
+function Panel({ title, hint, children, className = "" }) {
+  return (
+    <section className={`rounded-2xl border border-[#e5e3df] bg-gradient-to-b from-white to-[#fafaf8] p-5 ${className}`}>
+      <div className="mb-4">
+        <h2 className="font-semibold text-[#37352f]">{title}</h2>
+        {hint && <p className="text-xs text-[#8a8982] mt-0.5">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function KpiCard({ icon, label, value, sub, color }) {
+  return (
+    <div className="rounded-2xl border border-[#e5e3df] bg-white p-4">
+      <div className="flex items-center gap-2 text-xs text-[#8a8982] uppercase tracking-wider">
+        <span style={{ color }}>{icon}</span>
+        {label}
+      </div>
+      <div className="text-3xl font-semibold mt-2 tabular-nums" style={{ color }}>{value}</div>
+      <div className="text-[11px] text-[#8a8982] mt-1">{sub}</div>
+    </div>
+  );
+}
+
+function KpiRing({ label, value, sub, pct, color }) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="rounded-2xl border border-[#e5e3df] bg-white p-4 flex items-center gap-4">
+      <div className="relative h-16 w-16 shrink-0">
+        <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+          <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(55,53,47,0.08)" strokeWidth="6" />
+          <circle
+            cx="32"
+            cy="32"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={c - c * pct}
+            style={{ transition: "stroke-dashoffset .6s ease" }}
+          />
+        </svg>
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs text-[#8a8982] uppercase tracking-wider">{label}</div>
+        <div className="text-2xl font-semibold tabular-nums" style={{ color }}>{value}</div>
+        <div className="text-[11px] text-[#8a8982] truncate">{sub}</div>
+      </div>
+    </div>
+  );
+}
+
+function OrbitRing({ pct, color }) {
+  const r = 30;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="relative h-20 w-20 shrink-0">
+      <svg viewBox="0 0 80 80" className="h-20 w-20 -rotate-90">
+        <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(55,53,47,0.08)" strokeWidth="8" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c - c * pct}
+          style={{ transition: "stroke-dashoffset .6s ease" }}
+        />
+      </svg>
+      <span className="absolute inset-0 grid place-items-center text-sm font-semibold tabular-nums">
+        {Math.round(pct * 100)}%
+      </span>
+    </div>
+  );
+}
+
+function Mini({ label, value }) {
+  return (
+    <div className="rounded-md bg-white border border-[#e5e3df] px-2 py-1.5">
+      <div className="text-[9px] uppercase tracking-wider text-[#8a8982]">{label}</div>
+      <div className="font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function Legend() {
+  return (
+    <div className="mt-4 flex items-center gap-2 text-[10px] text-[#8a8982]">
+      <span>Less</span>
+      {HEAT.map((c) => (
+        <span key={c} className="h-3 w-3 rounded-[3px]" style={{ background: c }} />
+      ))}
+      <span>More</span>
+    </div>
+  );
+}
+
+function Insight({ icon, children }) {
+  return (
+    <li className="flex gap-3 rounded-xl border border-[#e5e3df] bg-white p-3">
+      <span className="mt-0.5">{icon}</span>
+      <span>{children}</span>
+    </li>
+  );
+}
+
+function Empty({ text }) {
+  return <p className="text-sm text-[#8a8982] py-8 text-center">{text}</p>;
 }

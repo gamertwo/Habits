@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
-import { Calendar, Plus, BarChart, LineChart, Sword, Trophy, FileText, Timer, GitBranch, ChevronUp, Menu, Smile ,Clock } from "lucide-react";
+import { Calendar, Plus, BarChart, LineChart, Sword, Trophy, FileText, Timer, GitBranch, ChevronUp, Menu, StickyNote, Clock } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -78,14 +78,7 @@ export default function Navbar() {
                   <span>Strategic Flow</span>
                 </Link>
                 
-                <Link 
-                  href="/mood-tracker" 
-                  className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-gray-700 rounded-md"
-                >
-                  <Smile className="h-5 w-5" />
-                  <span>Mood Tracker</span>
-                </Link>
-                 <Link 
+                 <Link
                   href="/time-log" 
                   className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-gray-700 rounded-md"
                 >
@@ -112,9 +105,9 @@ export default function Navbar() {
           <span className="text-xs">Progress</span>
         </Link>
         
-        <Link href="/mood-tracker" className={`flex flex-col items-center gap-1 ${isActive('/mood-tracker')}`}>
-          <Smile className="h-6 w-6" />
-          <span className="text-xs">Mood</span>
+        <Link href="/union" className={`flex flex-col items-center gap-1 ${isActive('/union')}`}>
+          <StickyNote className="h-6 w-6" />
+          <span className="text-xs">Union</span>
         </Link>
 
         <Link href="/analytics" className={`flex flex-col items-center gap-1 ${isActive('/analytics')}`}>

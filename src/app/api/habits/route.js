@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../db/mongodb";
+import { sanitizeSubgoals } from "../../../lib/subgoals";
 
 /** Utility */
 const json = (data, init = {}) =>
@@ -54,6 +55,7 @@ export async function GET() {
         Array.isArray(h.daysOfWeek) && h.daysOfWeek.length === 7
           ? h.daysOfWeek.map(Boolean)
           : defaultDaysOfWeek(),
+      subgoals: Array.isArray(h.subgoals) ? h.subgoals : [],
     }));
 
     return json(safe);
@@ -125,6 +127,7 @@ export async function POST(request) {
       xpPerCompletion,
       color,
       daysOfWeek,
+      subgoals: sanitizeSubgoals(body.subgoals),
       userId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -182,6 +185,11 @@ export async function PUT(request) {
 
     if (Array.isArray(rest.daysOfWeek) && rest.daysOfWeek.length === 7) {
       update.daysOfWeek = rest.daysOfWeek.map(Boolean);
+    }
+
+    // Sub-goal tree (nested sticky notes). Sanitised: depth + size capped.
+    if (Array.isArray(rest.subgoals)) {
+      update.subgoals = sanitizeSubgoals(rest.subgoals);
     }
 
     // Note: "attributions" (the “Done on …” pills) are local-only in the UI,
