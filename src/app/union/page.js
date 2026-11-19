@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { StickyNote, Plus, X, Check, ChevronDown, ChevronRight, ChevronLeft, Pencil, Trash2 } from "lucide-react";
-import { loadHabits, saveHabits, makeHabit } from "@/lib/localHabits";
+import { loadHabits, saveHabits, makeHabit, activeHabits } from "@/lib/localHabits";
 import HabitImportExport from "@/components/HabitImportExport";
 import {
   dayKey,
@@ -34,6 +34,7 @@ export default function UnionPage() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PALETTE[0]);
   const [newEmoji, setNewEmoji] = useState("");
+  const [newExpiry, setNewExpiry] = useState("");
 
   const today = dayKey();
   const [weekOffset, setWeekOffset] = useState(0);
@@ -57,9 +58,13 @@ export default function UnionPage() {
   const addHabit = (e) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    persist([...habits, makeHabit({ name: newName, color: newColor, emoji: newEmoji.trim().slice(0, 4) })]);
+    persist([
+      ...habits,
+      makeHabit({ name: newName, color: newColor, emoji: newEmoji.trim().slice(0, 4), expiresOn: newExpiry || null }),
+    ]);
     setNewName("");
     setNewEmoji("");
+    setNewExpiry("");
   };
 
   const deleteHabit = (id) => {
@@ -77,8 +82,10 @@ export default function UnionPage() {
     commit(habit._id, { completedDates: next });
   };
 
-  const totalSub = habits.reduce((a, h) => a + countNodes(h.subgoals), 0);
-  const ticksToday = habits.reduce(
+  // `habits` holds everything in storage; the board shows only the ones still running.
+  const shown = activeHabits(habits, today);
+  const totalSub = shown.reduce((a, h) => a + countNodes(h.subgoals), 0);
+  const ticksToday = shown.reduce(
     (a, h) => a + ticksOn(h.subgoals, today) + ((h.completedDates || []).some((d) => normalizeDay(d) === today) ? 1 : 0),
     0
   );
@@ -134,13 +141,23 @@ export default function UnionPage() {
               />
             ))}
           </div>
+          <label className="flex items-center gap-1.5 text-xs text-[#777570]">
+            Ends
+            <input
+              type="date"
+              value={newExpiry}
+              onChange={(e) => setNewExpiry(e.target.value)}
+              min={today}
+              className="rounded-md border border-[#d6d3cd] px-2 py-1.5 text-[#37352f]"
+            />
+          </label>
           <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-[#0d9488] px-3 py-2 text-sm font-medium text-white">
             <Plus className="h-4 w-4" /> Add habit
           </button>
         </form>
 
         {!loaded && <p className="text-[#8a8982] animate-pulse">Pinning notes…</p>}
-        {loaded && habits.length === 0 && (
+        {loaded && shown.length === 0 && (
           <div className="rounded-lg border border-dashed border-[#d6d3cd] p-10 text-center text-[#8a8982]">
             No habits yet. Add one above, then pin sub-goals to it.
           </div>
@@ -148,7 +165,7 @@ export default function UnionPage() {
 
         {/* Board */}
         <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 items-start">
-          {habits.map((habit, i) => (
+          {shown.map((habit, i) => (
             <HabitNote
               key={habit._id}
               habit={habit}
@@ -234,6 +251,9 @@ function HabitNote({ habit, tilt, today, week, weekOffset, onWeekChange, onSubgo
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-lg leading-tight truncate">{habit.name}</h2>
           <p className="text-[11px] text-[#777570]">{habit.category || "General"}</p>
+          {habit.expiresOn && (
+            <p className="text-[11px] text-[#0d9488] mt-0.5">Ends {habit.expiresOn}</p>
+          )}
         </div>
         <Ring pct={pct} color={accent} label={`${doneToday}/${total}`} />
         <button onClick={onDelete} className="p-1 text-[#9b9a97] hover:text-red-600" aria-label="Delete habit" title="Delete habit">

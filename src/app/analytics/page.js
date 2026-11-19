@@ -23,6 +23,7 @@ import {
   habitDayCounts,
   tickCountByDay,
   flatten,
+  normalizeDay,
 } from "@/lib/subgoals";
 import { loadHabits } from "@/lib/localHabits";
 
@@ -119,7 +120,13 @@ function analyse(habits, days, today) {
       subTicks,
       totalTicks: habitTicks + subTicks,
       activeDays: activeInRange.size,
-      rate: days.length ? activeInRange.size / days.length : 0,
+      // Rate counts only the days the habit was running (created → expiry).
+      rate: (() => {
+        const from = h.createdAt ? normalizeDay(h.createdAt) : null;
+        const eligible = days.filter((d) => (!from || d >= from) && (!h.expiresOn || d <= h.expiresOn));
+        return eligible.length ? [...activeInRange].filter((d) => eligible.includes(d)).length / eligible.length : 0;
+      })(),
+      expiresOn: h.expiresOn || null,
       current: currentStreak(merged, today),
       best: bestStreak(merged, days),
       merged,
@@ -409,6 +416,7 @@ export default function AnalyticsPage() {
                         <span className="font-semibold truncate">{h.name}</span>
                       </div>
                       <div className="text-[11px] text-[#8a8982]">{h.category}</div>
+                      {h.expiresOn && <span className="ml-2 rounded bg-[#f1efeb] px-1.5 py-0.5 text-[10px] text-[#777570]">ended {h.expiresOn}</span>}
                       <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                         <Mini label="ticks" value={h.totalTicks} />
                         <Mini label="streak" value={`${h.current}d`} />

@@ -1,6 +1,6 @@
 // Serves the old /api/habits contract from the browser's localStorage.
 // Pages keep calling fetch("/api/habits") unchanged; no server or login involved.
-import { loadHabits, saveHabits } from "./localHabits";
+import { loadHabits, saveHabits, activeHabits } from "./localHabits";
 
 const DEFAULT_DAYS = [true, true, true, true, true, true, true];
 
@@ -29,7 +29,8 @@ function handleHabits(url, init = {}) {
   const method = (init.method || "GET").toUpperCase();
   const list = loadHabits();
 
-  if (method === "GET") return json(list);
+  // Pages only see habits still running; expired ones stay stored for Analytics.
+  if (method === "GET") return json(activeHabits(list));
 
   if (method === "POST") {
     const body = parse(init.body);
@@ -47,6 +48,7 @@ function handleHabits(url, init = {}) {
       color: typeof body.color === "string" && body.color.trim() ? body.color.trim() : "#10B981",
       daysOfWeek: Array.isArray(body.daysOfWeek) && body.daysOfWeek.length === 7 ? body.daysOfWeek.map(Boolean) : DEFAULT_DAYS,
       subgoals: Array.isArray(body.subgoals) ? body.subgoals : [],
+      expiresOn: typeof body.expiresOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.expiresOn) ? body.expiresOn : null,
       createdAt: new Date().toISOString(),
     };
     saveHabits([...list, doc]);

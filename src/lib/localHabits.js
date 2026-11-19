@@ -1,3 +1,5 @@
+import { dayKey } from "./subgoals";
+
 // Browser-only habit store (localStorage). No login, no server.
 const KEY = "habits-local-v1";
 
@@ -27,7 +29,9 @@ export function saveHabits(list) {
   }
 }
 
-export const makeHabit = ({ name, color = "#10B981", emoji = "", category = "General" }) => ({
+// `expiresOn` (YYYY-MM-DD, optional): after that day the habit leaves the active
+// lists but its data stays in storage, so Analytics keeps its history.
+export const makeHabit = ({ name, color = "#10B981", emoji = "", category = "General", expiresOn = null }) => ({
   _id: `h_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
   name: name.trim().slice(0, 80),
   category,
@@ -35,7 +39,18 @@ export const makeHabit = ({ name, color = "#10B981", emoji = "", category = "Gen
   color,
   completedDates: [],
   subgoals: [],
+  expiresOn: isDayKey(expiresOn) ? expiresOn : null,
+  createdAt: new Date().toISOString(),
 });
+
+const isDayKey = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/** Habits still running today (not past their expiry). Storage keeps all of them. */
+export function activeHabits(list, today = dayKey()) {
+  return list.filter((h) => !isDayKey(h.expiresOn) || h.expiresOn >= today);
+}
+
+export const isExpired = (h, today = dayKey()) => isDayKey(h.expiresOn) && h.expiresOn < today;
 
 const uniqDates = (arr) => [...new Set((arr || []).map((d) => String(d).slice(0, 10)))].sort();
 
