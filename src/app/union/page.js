@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { StickyNote, Plus, X, Check, ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { StickyNote, Plus, X, Check, ChevronDown, ChevronRight, ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import { loadHabits, saveHabits, makeHabit } from "@/lib/localHabits";
 import HabitImportExport from "@/components/HabitImportExport";
 import {
@@ -19,9 +19,10 @@ import {
 const WEEK_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 const TILTS = ["-rotate-[0.8deg]", "rotate-[0.6deg]", "-rotate-[0.4deg]", "rotate-[1deg]"];
 
-const lastNDays = (n) => {
-  const today = dayKey();
-  return Array.from({ length: n }, (_, i) => addDays(today, i - (n - 1)));
+// Last n days ending `weekOffset` weeks before today (0 = this week).
+const lastNDays = (n, weekOffset = 0) => {
+  const end = addDays(dayKey(), weekOffset * 7);
+  return Array.from({ length: n }, (_, i) => addDays(end, i - (n - 1)));
 };
 
 const PALETTE = ["#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#F59E0B", "#EF4444"];
@@ -35,7 +36,8 @@ export default function UnionPage() {
   const [newEmoji, setNewEmoji] = useState("");
 
   const today = dayKey();
-  const week = useMemo(() => lastNDays(7), []);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const week = useMemo(() => lastNDays(7, weekOffset), [weekOffset]);
 
   useEffect(() => {
     setHabits(loadHabits());
@@ -153,6 +155,8 @@ export default function UnionPage() {
               tilt={TILTS[i % TILTS.length]}
               today={today}
               week={week}
+              weekOffset={weekOffset}
+              onWeekChange={(d) => setWeekOffset((o) => Math.min(0, o + d))}
               onSubgoals={(next) => commit(habit._id, { subgoals: next })}
               onDelete={() => deleteHabit(habit._id)}
               onToggleHabit={() => toggleHabitToday(habit)}
@@ -192,7 +196,7 @@ function SaveBadge({ state }) {
 /* ----------------------------------------------------------------
    A habit rendered as a big sticky note
    ---------------------------------------------------------------- */
-function HabitNote({ habit, tilt, today, week, onSubgoals, onToggleHabit, onDelete }) {
+function HabitNote({ habit, tilt, today, week, weekOffset, onWeekChange, onSubgoals, onToggleHabit, onDelete }) {
   const [draft, setDraft] = useState("");
   const accent = habit.color || "#10B981";
   const rows = flatten(habit.subgoals);
@@ -258,12 +262,44 @@ function HabitNote({ habit, tilt, today, week, onSubgoals, onToggleHabit, onDele
 
       {/* weekday header */}
       {total > 0 && (
-        <div className="mt-4 flex items-center justify-end gap-1 pr-1 text-[10px] text-[#8a8982]">
-          {week.map((d) => (
-            <span key={d} className={`w-5 text-center ${d === today ? "text-[#37352f]" : ""}`}>
-              {WEEK_LETTERS[new Date(d + "T00:00:00").getDay()]}
+        <div className="mt-4 flex items-center justify-between gap-1 text-[10px] text-[#8a8982]">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onWeekChange(-1)}
+              className="p-0.5 rounded hover:bg-[#f1efeb] text-[#4a4843]"
+              aria-label="Previous week"
+              title="Previous week"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <span className="tabular-nums min-w-[78px] text-center">
+              {week[0].slice(5)} → {week[6].slice(5)}
             </span>
-          ))}
+            <button
+              onClick={() => onWeekChange(1)}
+              disabled={weekOffset === 0}
+              className="p-0.5 rounded hover:bg-[#f1efeb] text-[#4a4843] disabled:opacity-30 disabled:hover:bg-transparent"
+              aria-label="Next week"
+              title="Next week"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            {weekOffset !== 0 && (
+              <button
+                onClick={() => onWeekChange(-weekOffset)}
+                className="ml-1 px-1.5 rounded border border-[#d6d3cd] hover:bg-[#f1efeb]"
+              >
+                This week
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1 pr-1">
+            {week.map((d) => (
+              <span key={d} className={`w-5 text-center ${d === today ? "text-[#37352f] font-semibold" : ""}`}>
+                {WEEK_LETTERS[new Date(d + "T00:00:00").getDay()]}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -427,10 +463,11 @@ function NodeCard({ node, depth, today, week, accent, tree, onSubgoals }) {
                 if (window.confirm(`Delete "${node.title}" and everything inside it?`))
                   onSubgoals(removeNode(tree, node.id));
               }}
-              className="p-1 text-[#9b9a97] hover:text-red-400"
-              aria-label="Delete"
+              className="p-1 text-[#9b9a97] hover:text-red-600"
+              aria-label="Delete sub-goal"
+              title="Delete sub-goal"
             >
-              <X className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
